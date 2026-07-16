@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Building2, Check, ChevronDown, ChevronUp, Clock, DollarSign, MapPin } from "lucide-react";
+import { Building2, Check, ChevronDown, ChevronUp, Clock, DollarSign, MapPin, ScrollText } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
 import { useFilters } from "@/hooks/use-filters";
 import { useJobFeed } from "@/hooks/use-job-feed";
+import { useActivityLog } from "@/hooks/use-activity-log";
 import { matchJobs } from "@/lib/match-jobs";
 import { REQUIRED_FIELDS, type Application } from "@/lib/types";
 import { useRequiredInfo } from "@/hooks/use-required-info";
@@ -17,8 +18,10 @@ export function JobFeedTab() {
   const { filters, loading: filtersLoading } = useFilters();
   const { answers } = useRequiredInfo();
   const { jobs, applications, loading: jobsLoading, setStatus, clearStatus, simulateSubmit } = useJobFeed();
+  const { entriesByApplication, loadingApplicationId, loadEntries } = useActivityLog();
   const [showFilteredOut, setShowFilteredOut] = useState(false);
   const [simulateNote, setSimulateNote] = useState<Record<string, string>>({});
+  const [expandedLogApplicationId, setExpandedLogApplicationId] = useState<string | null>(null);
 
   const loading = profileLoading || filtersLoading || jobsLoading || !profile || !filters || !jobs;
 
@@ -51,6 +54,17 @@ export function JobFeedTab() {
     const data = await simulateSubmit(jobId);
     setSimulateNote((prev) => ({ ...prev, [jobId]: data.note }));
     void company;
+  };
+
+  const toggleActivityLog = (applicationId: string) => {
+    if (expandedLogApplicationId === applicationId) {
+      setExpandedLogApplicationId(null);
+      return;
+    }
+    setExpandedLogApplicationId(applicationId);
+    if (!entriesByApplication[applicationId]) {
+      void loadEntries(applicationId);
+    }
   };
 
   return (
@@ -152,9 +166,53 @@ export function JobFeedTab() {
             )}
 
             {status === "submitted" && (
-              <div className="mt-3 flex items-center gap-1.5 text-[12.5px] text-ledger">
-                <Check size={13} /> {simulateNote[job.id] ?? "Recorded (simulated)."} Real activity logging is tracked
-                separately (issue #6).
+              <div className="mt-3">
+                <div className="flex items-center gap-1.5 text-[12.5px] text-ledger">
+                  <Check size={13} /> {simulateNote[job.id] ?? "Recorded (simulated)."}
+                </div>
+                {application && (
+                  <>
+                    <button
+                      onClick={() => toggleActivityLog(application.id)}
+                      className={`${ghostButtonClass} inline-flex items-center gap-1.5 mt-2`}
+                    >
+                      {expandedLogApplicationId === application.id ? (
+                        <ChevronUp size={13} />
+                      ) : (
+                        <ChevronDown size={13} />
+                      )}
+                      <ScrollText size={13} /> Activity log
+                    </button>
+                    {expandedLogApplicationId === application.id && (
+                      <div className="mt-2 border border-line rounded px-3 py-2.5 bg-white/60">
+                        {loadingApplicationId === application.id && (
+                          <div className="font-mono text-[11px] text-muted">Loading…</div>
+                        )}
+                        {loadingApplicationId !== application.id &&
+                          (entriesByApplication[application.id]?.length ?? 0) === 0 && (
+                            <div className="font-mono text-[11px] text-muted">No entries yet.</div>
+                          )}
+                        {loadingApplicationId !== application.id &&
+                          entriesByApplication[application.id]?.map((entry) => (
+                            <div
+                              key={entry.id}
+                              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[12.5px] py-1 border-b border-line/60 last:border-b-0"
+                            >
+                              <span className="font-mono text-[10.5px] text-muted/80">
+                                {new Date(entry.timestamp).toLocaleString()}
+                              </span>
+                              <span className="text-ink font-medium">{entry.field_label}</span>
+                              <span className="font-mono text-[10.5px] text-ledger bg-ledger/[0.08] border border-ledger/20 rounded px-1.5 py-0.5">
+                                {entry.value_category}
+                              </span>
+                              <span className="text-muted">sent to {entry.sent_to}</span>
+                              <span className="font-mono text-[10px] uppercase text-muted/80">{entry.source}</span>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
           </SectionCard>

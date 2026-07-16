@@ -234,6 +234,99 @@ domain type needed that weren't in the original schema --
 `resume_file_name`, `resume_file_size`, `resume_mime_type` -- see
 `prisma/migrations/20260716063000_add_profile_resume_metadata/`.
 
+## Activity Log + privacy/security hardening (issue #6)
+
+The Postgres-backed `Repository` now implements `listApplicationLogEntries`
+and `createApplicationLogEntry` (`apps/web/lib/repository/postgres.ts`),
+exposed read-only at `GET /api/activity-log` (optionally
+`?application_id=...`) and written to by
+`app/api/applications/[jobListingId]/simulate-submit/route.ts` when a
+(simulated) application is submitted -- one entry per `RequiredInfoAnswer`
+with `mode: "auto"`, plus one for the resume if uploaded. The Job Feed tab
+renders these inline (an expandable "Activity log" disclosure under a
+submitted application card), matching the rest of the app's inline-expansion
+interaction style rather than a modal.
+
+Hardening pass done alongside this:
+
+- **Every `Repository` method and API route scopes by `userId`** -- verified
+  by reading every route under `apps/web/app/api/**/route.ts` end to end.
+  All of them call `getCurrentUserId()` and thread it into every repository
+  call; nothing accepts a client-supplied user id. `createApplicationLogEntry`
+  additionally re-verifies server-side that the target `Application` actually
+  belongs to the caller before writing (`postgres.ts`), rather than trusting
+  the `application_id` argument alone -- defense in depth in case a future
+  caller ever gets that wrong. `GET /api/activity-log` has no corresponding
+  client-facing `POST`: log entries are only ever written by trusted
+  server-side code paths (this stub today, the real apply agent later), so a
+  client can never fabricate or backdate its own audit trail.
+- **Found and fixed a plaintext leak into a potential server log.**
+  `objectKeyFromResumeUrl` (`postgres.ts`) used to throw
+  `` `Unrecognized resume URL scheme: ${resumeUrl}` `` on its defensive
+  else-branch -- `resumeUrl` at that point is the *decrypted* value of the
+  sensitive `resumeFileUrlEncrypted` column. That error is reachable from
+  `title-derivation.ts`'s resume-reading path, whose callers
+  (`app/api/title-suggestions*/route.ts`) fall back to a bare
+  `console.error("...", err)` for unrecognized errors -- which would have
+  printed the decrypted resume reference to server logs. Fixed to report
+  only non-sensitive shape info (expected prefix, actual length) instead of
+  the value itself.
+- **Resume bytes and `RequiredInfoAnswer` values were otherwise confirmed
+  not to leak.** `ApplicationLogEntry` has no column that could hold either
+  (see schema doc comment) and the new log-writing code only ever reads
+  `field_id`/`mode` and `resume_file_name` (never `value` or
+  `resume_file_url`) to decide *whether* to write an entry. The one place
+  decrypted `RequiredInfoAnswer.value` legitimately leaves the server is
+  `GET /api/required-info`'s JSON response -- expected and necessary (the UI
+  has to display/edit a user's own answer), scoped to that user only, never
+  logged. `title-derivation.ts` legitimately sends decrypted resume bytes to
+  the Anthropic API (that's the point of the AI-title-suggestion feature) --
+  worth knowing about for a future data-processing/privacy-policy review,
+  but not a bug, and unchanged by this pass.
+- **No video/screen-recording persistence exists in this app**, confirmed by
+  searching the whole tree for recording/capture-related code
+  (`MediaRecorder`, `getDisplayMedia`, `puppeteer`, `playwright`, `video`,
+  `screen record`, etc.) -- there is none. **This is a cross-cutting
+  requirement for whoever builds issue #4's browser-orchestration apply
+  agent, not something enforceable from this branch**: that service must
+  never write video/screen-recording data (or screenshots capturing
+  sensitive form fields) to disk or object storage for apply sessions.
+  Flagging it here explicitly so it's visible at integration time, same
+  spirit as the `KeyProvider`/`ResumeStorage` production seams below.
+
+### Open question: should internal/support tooling ever get plaintext access to sensitive fields?
+
+Issue #6 asks this explicitly rather than wanting it silently resolved.
+**Recommendation: no, not as a standing capability.** Reasoning:
+
+- The whole point of application-layer envelope encryption here (rather than
+  `pgcrypto` or a DB view) is that the database -- and, by extension, anyone
+  with only DB access (e.g. via `prisma studio`, a support runbook, or a
+  read replica) -- never sees plaintext. Adding a general-purpose internal
+  tool that *can* decrypt (a "God mode" admin panel, a support script that
+  wraps `decryptField`) would quietly recreate the exact access surface this
+  design deliberately avoided, just one layer up.
+- The sensitive fields in question (work authorization, veteran/disability
+  status, race/ethnicity, gender, security clearance, criminal history, and
+  the resume itself) are legally sensitive categories in most jurisdictions
+  (EEO/voluntary-disclosure data especially). Standing plaintext access for
+  support staff -- who don't need it to do their job in the overwhelming
+  majority of support interactions -- is pure downside: it expands who could
+  be compelled, phished, or simply make a mistake, without a matching
+  product need.
+- If a genuine support need for a specific case shows up later (e.g.
+  "user says a submitted value was wrong, needs correcting"), the sane shape
+  is a **narrow, purpose-built, audited path**: scoped to one user/field,
+  requiring the user's explicit request or consent, itself logged (ironically,
+  via a mechanism like `ApplicationLogEntry` but for *access*, not
+  submission), and time-boxed -- not blanket `KeyProvider` access handed to a
+  support tool. That's a real feature to design later if/when the need is
+  concrete, not something to build speculatively now.
+- This directly informed keeping `GET /api/activity-log` read-only with no
+  admin/support-facing variant in this pass -- there is currently no code
+  path anywhere in the app, support-facing or otherwise, that reads a
+  sensitive field for anyone other than the owning user.
+
 ## Open questions / things flagged rather than guessed
 
 - **Production `KeyProvider`.** Which KMS backs `FIELD_ENCRYPTION_KEY` in

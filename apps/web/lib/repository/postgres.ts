@@ -8,6 +8,7 @@ import {
 } from "auto-job-applier-db";
 import type {
   Application,
+  ApplicationLogEntry,
   ApplicationStatus,
   Filters,
   JobListing,
@@ -27,6 +28,7 @@ import {
   fromPrismaDatePosted,
   fromPrismaEmploymentType,
   fromPrismaLevel,
+  fromPrismaLogEntrySource,
   fromPrismaMode,
   fromPrismaWorkArrangement,
   toPrismaApplicationStatus,
@@ -34,6 +36,7 @@ import {
   toPrismaDatePosted,
   toPrismaEmploymentType,
   toPrismaLevel,
+  toPrismaLogEntrySource,
   toPrismaMode,
   toPrismaWorkArrangement,
 } from "./mapping";
@@ -127,7 +130,16 @@ async function toDomainProfile(userId: string, row: PrismaProfile | null): Promi
 /** Extracts the ResumeStorage object key from a decrypted `local-disk://...` reference. */
 function objectKeyFromResumeUrl(resumeUrl: string): string {
   if (!resumeUrl.startsWith(RESUME_URL_PREFIX)) {
-    throw new Error(`Unrecognized resume URL scheme: ${resumeUrl}`);
+    // Deliberately do NOT interpolate `resumeUrl` into this message -- it's
+    // decrypted plaintext of a SENSITIVE column (Profile.resumeFileUrlEncrypted).
+    // This error can propagate to server logs (e.g. a bare `console.error` in
+    // an API route's catch block), and a log is exactly the kind of place
+    // this value must never land in plaintext. Report only non-sensitive
+    // shape info (expected prefix, actual length) -- enough to debug a
+    // storage-scheme mismatch without leaking the reference itself.
+    throw new Error(
+      `Unrecognized resume URL scheme: expected prefix "${RESUME_URL_PREFIX}", got a ${resumeUrl.length}-character value with a different prefix.`
+    );
   }
   return resumeUrl.slice(RESUME_URL_PREFIX.length);
 }
@@ -360,7 +372,69 @@ export const postgresRepository: Repository = {
   async deleteApplication(userId, jobListingId) {
     await prisma.application.deleteMany({ where: { userId, jobListingId } });
   },
+
+  // --- Activity log (ApplicationLogEntry, issue #6) -----------------------
+  async listApplicationLogEntries(userId, applicationId) {
+    const rows = await prisma.applicationLogEntry.findMany({
+      // `userId` is always in the where clause -- never trust `applicationId`
+      // alone to scope this query, since an id from another user's
+      // Application would otherwise leak that user's log rows.
+      where: { userId, ...(applicationId !== undefined && { applicationId }) },
+      orderBy: { timestamp: "desc" },
+    });
+    return rows.map(toDomainLogEntry);
+  },
+
+  async createApplicationLogEntry(userId, entry) {
+    await ensureUser(userId);
+    // Defense in depth: confirm the target Application actually belongs to
+    // this user before attributing a log row to them. `application_id` here
+    // is only ever supplied by server-side callers (e.g. simulate-submit),
+    // never taken directly from a client request body, but this check means
+    // that constraint doesn't have to hold forever for the scoping to be safe.
+    const application = await prisma.application.findUnique({
+      where: { id: entry.application_id },
+      select: { userId: true },
+    });
+    if (!application || application.userId !== userId) {
+      throw new Error("Cannot log against an application that does not belong to this user.");
+    }
+
+    const row = await prisma.applicationLogEntry.create({
+      data: {
+        userId,
+        applicationId: entry.application_id,
+        fieldLabel: entry.field_label,
+        valueCategory: entry.value_category,
+        sentTo: entry.sent_to,
+        source: toPrismaLogEntrySource(entry.source),
+      },
+    });
+    return toDomainLogEntry(row);
+  },
 };
+
+function toDomainLogEntry(row: {
+  id: string;
+  applicationId: string;
+  userId: string;
+  timestamp: Date;
+  fieldLabel: string;
+  valueCategory: string;
+  sentTo: string;
+  source: ReturnType<typeof toPrismaLogEntrySource>;
+}): ApplicationLogEntry {
+  return {
+    id: row.id,
+    application_id: row.applicationId,
+    user_id: row.userId,
+    timestamp: row.timestamp.toISOString(),
+    field_label: row.fieldLabel,
+    value_category: row.valueCategory,
+    sent_to: row.sentTo,
+    source: fromPrismaLogEntrySource(row.source),
+  };
+}
 
 function toDomainApplication(row: {
   id: string;
