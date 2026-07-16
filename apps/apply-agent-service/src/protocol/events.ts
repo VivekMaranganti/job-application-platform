@@ -87,7 +87,7 @@ export type AgentEvent =
       type: "yield_control";
       sessionId: string;
       timestamp: string;
-      reason: "manual_field" | "low_confidence" | "captcha" | "unrecognized_field" | "error";
+      reason: "manual_field" | "low_confidence" | "captcha" | "unrecognized_field" | "jurisdiction_not_cleared" | "error";
       field?: FieldRef;
       valueCategory?: FieldValueCategory;
       message: string;

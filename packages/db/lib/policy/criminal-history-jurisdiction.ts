@@ -1,5 +1,3 @@
-import type { RequiredFieldId, RequiredFieldMode } from "@/lib/types";
-
 // ---------------------------------------------------------------------------
 // Criminal-history "ban-the-box" jurisdiction policy gate (issue #7).
 //
@@ -17,6 +15,18 @@ import type { RequiredFieldId, RequiredFieldMode } from "@/lib/types";
 // authority makes it, jurisdiction by jurisdiction. Until then, every
 // jurisdiction defaults to "not allowed" -- there is no jurisdiction
 // pre-populated as allowed, on purpose.
+//
+// LOCATION: this lives in packages/db (not apps/web) deliberately -- it has
+// two real consumers, apps/web (RequiredInfoAnswer save-time gate) and
+// apps/apply-agent-service (per-application defense-in-depth check before
+// auto-filling criminal_history), and neither app depends on the other, so
+// the one piece of code both need to share has to live somewhere both can
+// import from without a reverse dependency. `RequiredFieldId`/
+// `RequiredFieldMode` are intentionally NOT imported from apps/web/lib/types
+// here for the same reason -- this module uses plain `string` for the field
+// id and a narrow literal union for mode, structurally identical to those
+// app-level types, so both apps can pass their own local types in without
+// this package depending on either app.
 // ---------------------------------------------------------------------------
 
 export interface Jurisdiction {
@@ -92,13 +102,11 @@ function candidateKeys(jurisdiction: Jurisdiction): string[] {
  * (e.g. `JobListing.location`, parsed), not the candidate's profile
  * location.
  *
- * Intended consumer: issue #4's apply-agent, which should call this
- * per-application, using the specific job being applied to, before ever
- * treating `criminal_history` as auto-fillable -- even though, as of this
- * writing, `saveRequiredInfoAnswer` (apps/web/lib/repository/postgres.ts)
- * additionally blocks `mode=auto` for `criminal_history` outright at save
- * time, so this function should always see mode=manual in practice today.
- * See README.md for the full reasoning on why both gates exist.
+ * Consumers: apps/web (informational only today, see resolveRequiredInfoModeForSave
+ * below for the actual save-time gate) and apps/apply-agent-service's
+ * field-matcher, which calls this per-application, using the specific job
+ * being applied to, before ever treating `criminal_history` as
+ * auto-fillable -- as defense-in-depth on top of the save-time gate.
  *
  * @param jurisdiction The job's location, or `null`/`undefined` if unknown.
  * @returns `true` only if that exact jurisdiction has been explicitly
@@ -130,15 +138,17 @@ export function isCriminalHistoryAutoModeAllowed(jurisdiction: Jurisdiction | nu
  * (currently: `postgres.ts`'s `saveRequiredInfoAnswer`), so there is exactly
  * one place this can be bypassed from, and it isn't this one.
  *
- * @param fieldId The `RequiredFieldId` being saved.
+ * @param fieldId The field id being saved (e.g. `RequiredFieldId` in
+ *   apps/web/lib/types.ts). Typed as `string` here so this shared package
+ *   doesn't need to depend on that app-level type.
  * @param requestedMode The mode the caller asked to persist (`undefined` if
  *   the caller isn't changing `mode` in this patch).
  * @returns The mode that should actually be persisted.
  */
-export function resolveRequiredInfoModeForSave(
-  fieldId: RequiredFieldId,
-  requestedMode: RequiredFieldMode | undefined
-): RequiredFieldMode | undefined {
+export function resolveRequiredInfoModeForSave<TMode extends string | undefined>(
+  fieldId: string,
+  requestedMode: TMode,
+): TMode | "manual" {
   if (fieldId === "criminal_history" && requestedMode === "auto") {
     return "manual";
   }

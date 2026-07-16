@@ -14,3 +14,8 @@ export { encryptField, decryptField, EnvKeyProvider } from "./lib/encryption";
 export type { KeyProvider } from "./lib/encryption";
 export { LocalDiskResumeStorage, resumeStorage } from "./lib/resume-storage";
 export type { ResumeStorage } from "./lib/resume-storage";
+export {
+  isCriminalHistoryAutoModeAllowed,
+  resolveRequiredInfoModeForSave,
+} from "./lib/policy/criminal-history-jurisdiction";
+export type { Jurisdiction } from "./lib/policy/criminal-history-jurisdiction";

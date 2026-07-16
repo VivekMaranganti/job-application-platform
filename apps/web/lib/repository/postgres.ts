@@ -21,7 +21,7 @@ import type {
   CompanySize,
 } from "@/lib/types";
 import type { Repository } from "./types";
-import { resolveRequiredInfoModeForSave } from "@/lib/policy/criminal-history-jurisdiction";
+import { resolveRequiredInfoModeForSave } from "auto-job-applier-db";
 import {
   fromPrismaApplicationStatus,
   fromPrismaCompanySize,
@@ -274,7 +274,7 @@ export const postgresRepository: Repository = {
   },
 
   async saveRequiredInfoAnswer(userId, fieldId, patch) {
-    // See apps/web/lib/policy/README.md: RequiredInfoAnswer.mode is a
+    // See packages/db/lib/policy/README.md: RequiredInfoAnswer.mode is a
     // single global per-user setting with no concept of which job/
     // jurisdiction it'll be used for, so `criminal_history` can never
     // honestly be persisted as `auto` here -- this unconditionally

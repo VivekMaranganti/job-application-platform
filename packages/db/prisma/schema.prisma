@@ -218,14 +218,17 @@ model Filters {
 /// row-level CHECK-free `AnswerMode` column, same as every other field.
 /// Enforcement lives one layer up, in application code, because it depends
 /// on the *job's* jurisdiction, which this table has no column for: see
-/// apps/web/lib/policy/README.md and
-/// apps/web/lib/policy/criminal-history-jurisdiction.ts, which unconditionally
+/// packages/db/lib/policy/README.md and
+/// packages/db/lib/policy/criminal-history-jurisdiction.ts, which unconditionally
 /// downgrade `mode=auto` requests for criminal_history to `manual` at save
 /// time (apps/web/lib/repository/postgres.ts's saveRequiredInfoAnswer) until
 /// real legal sign-off exists per jurisdiction. A raw SQL write or future
 /// migration script that bypasses that repository method would bypass this
 /// gate too — this column alone does not stop `mode = AUTO` from being
-/// written for criminal_history.
+/// written for criminal_history. apps/apply-agent-service's field-matcher
+/// also calls isCriminalHistoryAutoModeAllowed(job.jurisdiction) before ever
+/// treating this field as auto-fillable, as defense-in-depth on top of the
+/// save-time gate.
 ///
 /// SENSITIVE: `valueEncrypted` holds ciphertext, not plaintext. It is only
 /// meaningful when mode = AUTO. See README "Encryption at rest".

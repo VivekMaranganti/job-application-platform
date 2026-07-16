@@ -39,7 +39,7 @@ export interface SessionControl {
   recordHumanFill(field: FieldRef, category: FieldValueCategory): Promise<void>;
   /** Broadcasts `yield_control` and blocks until the human resolves it. */
   yieldControl(
-    reason: "manual_field" | "low_confidence" | "captcha" | "unrecognized_field" | "error",
+    reason: "manual_field" | "low_confidence" | "captcha" | "unrecognized_field" | "jurisdiction_not_cleared" | "error",
     field: FieldRef | undefined,
     category: FieldValueCategory | undefined,
     message: string,

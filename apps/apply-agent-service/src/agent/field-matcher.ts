@@ -1,7 +1,9 @@
+import { isCriminalHistoryAutoModeAllowed } from "auto-job-applier-db";
 import type { ExtractedField } from "../browser/dom-extraction";
 import type { ApplicationContext, RequiredInfoAnswerContext } from "../db/context";
 import type { FieldValueCategory } from "../protocol/events";
 import { classifyFields } from "./llm-client";
+import { parseJurisdiction } from "./jurisdiction";
 import { config } from "../config";
 
 // ---------------------------------------------------------------------------
@@ -85,7 +87,7 @@ export type FieldDecision =
       kind: "yield";
       field: ExtractedField;
       valueCategory?: FieldValueCategory;
-      reason: "manual_field" | "low_confidence" | "unrecognized_field";
+      reason: "manual_field" | "low_confidence" | "unrecognized_field" | "jurisdiction_not_cleared";
       message: string;
     };
 
@@ -132,6 +134,21 @@ function decideRequiredInfoField(
       valueCategory: category,
       reason: "manual_field",
       message: `"${field.label}" is configured as manual-entry -- waiting for the human to answer live.`,
+    };
+  }
+  // Defense-in-depth (issue #7): criminal_history should never reach here
+  // with mode="auto" today -- apps/web's saveRequiredInfoAnswer
+  // unconditionally downgrades it to "manual" at save time. This check
+  // exists in case that upstream gate is ever bypassed (raw DB write,
+  // migration script, future code change) -- it fails closed independent of
+  // whether the mode gate held. See packages/db/lib/policy/README.md.
+  if (category === "criminal_history" && !isCriminalHistoryAutoModeAllowed(parseJurisdiction(context.jobListing.location))) {
+    return {
+      kind: "yield",
+      field,
+      valueCategory: category,
+      reason: "jurisdiction_not_cleared",
+      message: `"${field.label}" (criminal history) has not been cleared for auto-fill in this job's jurisdiction -- waiting for the human to answer live.`,
     };
   }
   if (confidence < config.minAutoFillConfidence) {

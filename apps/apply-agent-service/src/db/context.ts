@@ -18,6 +18,14 @@ export interface JobListingContext {
   title: string;
   company: string;
   url: string;
+  /**
+   * Free-text location from the ATS connector (e.g. "New York, NY",
+   * "Remote", "San Francisco Bay Area"), or null if the connector didn't
+   * supply one. Used by agent/jurisdiction.ts to derive a best-effort
+   * `{ state?, city? }` for the criminal_history ban-the-box gate -- see
+   * packages/db/lib/policy/README.md.
+   */
+  location: string | null;
 }
 
 export interface RequiredInfoAnswerContext {
@@ -84,6 +92,7 @@ export async function loadApplicationContext(userId: string, applicationId: stri
       title: application.jobListing.title,
       company: application.jobListing.company,
       url: application.jobListing.url,
+      location: application.jobListing.location,
     },
     profile: {
       locations: profileRow?.locations ?? [],
