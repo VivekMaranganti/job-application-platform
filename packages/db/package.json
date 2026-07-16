@@ -1,0 +1,8 @@
+{
+  "name": "auto-job-applier-db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PLACEHOLDER. Real content (Prisma schema/migrations/generated client + the shared application-layer encryption helper) is owned by issue #2 and lives on branch agent/postgres-schema. This placeholder exists only so apps/web's workspace dependency on `auto-job-applier-db` resolves before the two branches are merged. It will be fully replaced at merge time — see README.md in this directory.",
+  "main": "./index.js",
+  "types": "./index.d.ts"
+}
