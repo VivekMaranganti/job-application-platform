@@ -27,14 +27,22 @@ different ORM/migration tool is preferred before this merges.
 
 ```
 prisma/
-  schema.prisma           # source of truth for the data model
+  schema.prisma            # source of truth for the data model
   migrations/
     migration_lock.toml
     <timestamp>_init/migration.sql
 lib/
-  encryption.ts           # app-layer AES-256-GCM helper for sensitive columns
-.env.example              # DATABASE_URL / FIELD_ENCRYPTION_KEY placeholders
+  encryption.ts             # app-layer AES-256-GCM helper for sensitive columns
+  encryption-provider.ts    # adapter matching the Next.js scaffold's EncryptionProvider shape
+.env.example                # DATABASE_URL / FIELD_ENCRYPTION_KEY placeholders
 ```
+
+This package lives at `packages/db` in the npm-workspaces monorepo set up on
+`agent/scaffold-nextjs` (issue #1) as `packages/db/package.json`'s
+`auto-job-applier-db` name/placeholder there expects. It was moved here from
+the repo root (where it was originally built standalone) so that workspace
+dependency resolution (`apps/web` depending on `auto-job-applier-db`) works
+without a manual path hack once the two branches merge.
 
 ## Running migrations locally
 
@@ -188,6 +196,29 @@ column. On top of that, a `CHECK (char_length(value_category) <= 100)`
 constraint is added as a soft guardrail: it can't prove a value isn't
 sensitive, but raw free-text answers are very unlikely to fit in 100
 characters, so it catches obvious misuse early.
+
+## Integrating with the Next.js scaffold (issue #1)
+
+`lib/encryption-provider.ts` exports `AesGcmEncryptionProvider`, a small
+adapter over `encryptField`/`decryptField` shaped to match the scaffold's
+`EncryptionProvider` interface (`apps/web/lib/repository/encryption.ts`:
+`encrypt(plaintext: string): Promise<string>` /
+`decrypt(ciphertext: string): Promise<string>`, ciphertext as base64
+string). It isn't wired up as an explicit `implements EncryptionProvider`
+since the two packages are on unmerged branches with nothing to import from
+yet -- do that (or just re-point the scaffold's import at this file) at
+merge time.
+
+**Not done here, left as a TODO for whoever wires up the Postgres-backed
+`Repository` implementation on the scaffold side:** a mapping helper between
+this package's Prisma client shape (camelCase fields, ciphertext for
+sensitive columns, e.g. `resumeFileUrlEncrypted: Buffer`) and the scaffold's
+domain types (`apps/web/lib/types.ts`: snake_case fields, plaintext, e.g.
+`resume_file_url: string`). This was deliberately skipped rather than
+guessed at -- the scaffold's `Repository` interface (`saveResume` takes a
+raw file buffer, not a URL) implies resume storage needs S3 upload logic
+this package doesn't own yet, so a mapping helper written now would either
+omit that or guess at an unsettled design. Build it once that's decided.
 
 ## Open questions / things flagged rather than guessed
 
