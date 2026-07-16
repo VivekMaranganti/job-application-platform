@@ -37,14 +37,32 @@ export interface ResumeStorage {
 }
 
 /**
- * Dev/test resume storage: writes to a local directory (default
- * `RESUME_STORAGE_DIR`, falling back to `.data/resumes` under this
- * package). NOT for production -- see the `ResumeStorage` doc comment.
+ * Dev/test resume storage: writes to a local directory. NOT for production
+ * -- see the `ResumeStorage` doc comment.
+ *
+ * `RESUME_STORAGE_DIR` is required, not defaulted. An earlier version of
+ * this fell back to `join(__dirname, "..", ".data", "resumes")` when unset,
+ * which worked when this package's code ran unbundled (plain `node`, e.g.
+ * the connector scripts) but broke under apps/web's Next.js/Turbopack
+ * build: bundlers commonly rewrite `__dirname` for bundled modules to a
+ * synthetic path (observed as literally "/ROOT") rather than this file's
+ * real on-disk location, so the fallback silently resolved to a directory
+ * that was never anywhere on the real filesystem -- `mkdir` then failed
+ * with ENOENT the first time a resume was uploaded through the web app.
+ * Failing loudly at construction time if the env var is missing is safer
+ * than a default that happens to work in one runtime and not another.
  */
 export class LocalDiskResumeStorage implements ResumeStorage {
   private readonly rootDir: string;
 
-  constructor(rootDir = process.env.RESUME_STORAGE_DIR || join(__dirname, "..", ".data", "resumes")) {
+  constructor(rootDir = process.env.RESUME_STORAGE_DIR) {
+    if (!rootDir) {
+      throw new Error(
+        "RESUME_STORAGE_DIR is not set. Set it to an absolute path (e.g. " +
+          "RESUME_STORAGE_DIR=\"/path/to/job_scraper/packages/db/.data/resumes\") " +
+          "in both apps/web/.env.local and packages/db/.env -- see packages/db/.env.example."
+      );
+    }
     this.rootDir = rootDir;
   }
 
