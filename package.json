@@ -1,0 +1,29 @@
+{
+  "name": "auto-job-applier-db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Postgres schema/migrations for the auto-job-applier data model (issue #2). Prisma is scoped to the database layer here; the Next.js app scaffold (issue #1) lives on a sibling branch and will import this schema/client once merged.",
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:status": "prisma migrate status",
+    "db:studio": "prisma studio",
+    "db:format": "prisma format",
+    "db:validate": "prisma validate",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.1.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true
+  }
+}
