@@ -7,24 +7,40 @@ import type { DatePosted, Filters, JobListing, Level } from "@/lib/types";
 // transparency is preserved: every listing gets an explicit list of reasons
 // it matched or didn't.
 //
-// UNKNOWN ISN'T A MISMATCH: the prototype's mock data had every field
-// populated, so it never had to decide how to treat a field a connector
-// couldn't determine. Real ATS connectors leave a lot of fields null on
-// purpose rather than guess (see e.g. connectors/greenhouse/README.md --
-// most real Greenhouse/Lever postings have no explicit employment_type,
-// remote_type, level, industry, or salary at all). For every filterable
-// field below except location and date_posted, a null value on the
-// JobListing is treated as "this posting doesn't say, so this filter
-// doesn't apply to it" (a reasonFor, not a reasonAgainst) -- not as a
-// confirmed non-match. Originally this module treated null the same as an
-// explicit mismatch, which meant that in practice almost no real
+// HANDLING FIELDS A CONNECTOR LEFT NULL: the prototype's mock data had
+// every field populated, so it never had to decide how to treat a field a
+// connector couldn't determine. Real ATS connectors leave a lot of fields
+// null on purpose rather than guess (see e.g.
+// connectors/greenhouse/README.md -- most real Greenhouse/Lever postings
+// have no explicit employment_type, remote_type, level, industry, or
+// salary at all). Originally this module treated null the same as an
+// explicit mismatch, which meant in practice almost no real
 // connector-sourced listing could ever match once a user set even one
 // employment_type/work_arrangement/level/industry/salary filter, since
 // that data is absent on most real postings -- silently making those
-// filters equivalent to "hide everything." Location and date_posted are
-// left strict (null still disqualifies) since connectors do reliably
-// populate them and a user's location/recency preference is central
-// enough to matching quality that silently ignoring it would be worse.
+// filters equivalent to "hide everything." Two different fixes apply,
+// depending on whether a sensible real-world default exists for the field:
+//
+// - work_arrangement and employment_type DO have one: an unlabeled posting
+//   overwhelmingly means an ordinary in-office, full-time role in
+//   practice (connectors only positively tag Remote/Hybrid/Internship/
+//   Contract/Part-time from an explicit signal). So null is treated as an
+//   implicit "Onsite"/"Full-time" -- it satisfies a filter for that
+//   default value, but does NOT satisfy a filter for Remote/Hybrid/
+//   Internship/Contract/Part-time. (A blanket "null bypasses the filter"
+//   rule was tried first and was wrong in the opposite direction: an
+//   Internship-only filter started showing ordinary senior full-time
+//   roles, since nothing had explicitly ruled them out.)
+// - level, industry, company_size, and salary have no such default (there's
+//   no real-world "most jobs are Mid-level" assumption to lean on), so a
+//   null value there is genuinely treated as neutral -- "this posting
+//   doesn't say, so this filter doesn't apply to it" (a reasonFor, not a
+//   reasonAgainst) rather than a confirmed non-match.
+//
+// location and date_posted are left strict (null still disqualifies)
+// since connectors do reliably populate them and a user's location/
+// recency preference is central enough to matching quality that silently
+// ignoring it would be worse.
 // ---------------------------------------------------------------------------
 
 export interface MatchInput {
@@ -108,36 +124,53 @@ export function matchJobs(jobs: JobListing[], input: MatchInput): MatchResult {
       else reasonsAgainst.push("Title doesn't match your target titles");
     }
 
-    // Work arrangement. NOTE: a null remote_type is NOT treated as a
-    // mismatch, only an explicit conflicting value is -- see this file's
-    // header. ATS connectors (e.g. Greenhouse) frequently can't tell
-    // remote/hybrid/onsite apart for a bare office location and leave this
-    // null rather than guess (packages/db/connectors/greenhouse/README.md);
-    // treating "employer didn't say" the same as "confirmed doesn't match"
-    // would silently reject postings that might well fit, which is worse
-    // than occasionally surfacing one that doesn't.
+    // Work arrangement. A null remote_type doesn't mean "unknowable" the
+    // same way industry/company_size do below -- connectors leave it null
+    // specifically for a bare office location with no hybrid/remote marker
+    // (packages/db/connectors/greenhouse/README.md), which in the real
+    // world overwhelmingly means onsite. So null is treated as an implicit
+    // "Onsite" for matching purposes: it satisfies an Onsite filter, but
+    // does NOT satisfy a Remote or Hybrid filter. (An earlier version of
+    // this let null bypass the filter entirely, which meant a Remote-only
+    // filter would show ordinary in-office roles just because the posting
+    // didn't explicitly rule it out -- wrong in the opposite direction.)
     if (filters.work_arrangement.length > 0) {
-      if (job.remote_type == null) {
-        reasonsFor.push("Work style not listed by this posting (filter not applied)");
-      } else if (filters.work_arrangement.includes(job.remote_type)) {
-        reasonsFor.push(`Work style: ${job.remote_type}`);
+      const effective = job.remote_type ?? "Onsite";
+      if (filters.work_arrangement.includes(effective)) {
+        reasonsFor.push(
+          job.remote_type ? `Work style: ${job.remote_type}` : "Work style not listed (assuming Onsite)"
+        );
       } else {
-        reasonsAgainst.push(`Work style (${job.remote_type}) not selected`);
+        reasonsAgainst.push(
+          job.remote_type
+            ? `Work style (${job.remote_type}) not selected`
+            : "Work style not listed (assumed Onsite, not in your selected styles)"
+        );
       }
     }
 
-    // Employment type. Same "unknown isn't a mismatch" rule as work
-    // arrangement above -- most Greenhouse/Lever postings have no explicit
-    // marker unless they're specifically an internship/contract/part-time
-    // role (see the connectors' README's for why "Full-time" is never
-    // inferred from absence of a marker).
+    // Employment type. Same reasoning as work arrangement above: a null
+    // employment_type isn't a coin flip -- connectors only ever positively
+    // tag Internship/Contract/Part-time from an explicit signal (a title
+    // keyword, or Lever's own commitment field), so the absence of a tag
+    // overwhelmingly means an ordinary full-time role, not "could be
+    // anything." Null is treated as an implicit "Full-time": it satisfies a
+    // Full-time filter, but does NOT satisfy an Internship/Contract/
+    // Part-time-only filter -- otherwise an Internship filter would show
+    // senior full-time roles just because they weren't explicitly marked
+    // "not an internship."
     if (filters.employment_type.length > 0) {
-      if (job.employment_type == null) {
-        reasonsFor.push("Employment type not listed by this posting (filter not applied)");
-      } else if (filters.employment_type.includes(job.employment_type)) {
-        reasonsFor.push(`Type: ${job.employment_type}`);
+      const effective = job.employment_type ?? "Full-time";
+      if (filters.employment_type.includes(effective)) {
+        reasonsFor.push(
+          job.employment_type ? `Type: ${job.employment_type}` : "Employment type not listed (assuming Full-time)"
+        );
       } else {
-        reasonsAgainst.push(`Employment type (${job.employment_type}) not selected`);
+        reasonsAgainst.push(
+          job.employment_type
+            ? `Employment type (${job.employment_type}) not selected`
+            : "Employment type not listed (assumed Full-time, not in your selected types)"
+        );
       }
     }
 
