@@ -101,11 +101,11 @@ into which bucket:
   extraction from unstructured HTML is a meaningfully different (and riskier
   to get subtly wrong) problem than the structured-field mapping this pass
   does.
-- **Other ATS connectors.** Lever/Ashby/Workday (referenced in
-  `seed-jobs.ts`'s fixture data) aren't built -- this issue was scoped to
-  Greenhouse only. Each would live alongside this one under `connectors/`
-  with its own fetch/normalize/config, sharing the same
-  `(source_connector, external_id)` upsert pattern.
+- **Other ATS connectors.** Lever is now built (`connectors/lever/`, sharing
+  `connectors/shared/title-inference.ts` with this one). Ashby/Workday
+  (referenced in `seed-jobs.ts`'s fixture data) still aren't -- each would
+  live alongside these under `connectors/` with its own fetch/normalize/
+  config, sharing the same `(source_connector, external_id)` upsert pattern.
 - **Live-DB verification.** Like the rest of packages/db (see the root
   README's "Open questions" section), no reachable Postgres/Docker was
   available while building this in this environment. Validated via

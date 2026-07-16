@@ -11,6 +11,7 @@
     "dev": "npm run dev --workspace=web",
     "build": "npm run build --workspace=web",
     "lint": "npm run lint --workspace=web",
-    "db:seed:greenhouse": "npm run db:seed:greenhouse --workspace=auto-job-applier-db"
+    "db:seed:greenhouse": "npm run db:seed:greenhouse --workspace=auto-job-applier-db",
+    "db:seed:lever": "npm run db:seed:lever --workspace=auto-job-applier-db"
   }
 }

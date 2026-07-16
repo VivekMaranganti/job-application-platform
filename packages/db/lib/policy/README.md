@@ -159,9 +159,13 @@ that work has a policy function to call once it exists, not to build it.
 
 `JobListing.location` is a free-text string from whatever ATS connector
 produced the listing (e.g. `"New York, NY"`, `"Remote"`, `"San Francisco Bay
-Area"`) — there's no structured state/city column. `apps/apply-agent-service`
-parses a best-effort `{ state?, city? }` out of it
-(`src/agent/jurisdiction.ts`) before calling `isCriminalHistoryAutoModeAllowed`.
+Area"`) — there's no structured state/city column. `parseJurisdiction`
+(`lib/policy/jurisdiction.ts`, exported from this package's index alongside
+the gate itself) turns that into a best-effort `{ state?, city? }` before
+either consumer calls `isCriminalHistoryAutoModeAllowed`. It lives here
+rather than in one app's tree for the same reason the gate does — both
+`apps/web` (the apply-context endpoint) and `apps/apply-agent-service`
+(`field-matcher.ts`) need it.
 This parse is deliberately conservative: if it can't confidently extract a US
 state abbreviation, it passes `undefined`/`{}` through, which
 `isCriminalHistoryAutoModeAllowed` already treats as "not allowed" (see its

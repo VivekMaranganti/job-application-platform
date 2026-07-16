@@ -23,6 +23,17 @@ export interface ResumeStorage {
   put(objectKey: string, file: { buffer: Buffer }): Promise<void>;
   get(objectKey: string): Promise<Buffer | null>;
   delete(objectKey: string): Promise<void>;
+  /**
+   * Returns an absolute filesystem path for this object, if (and only if)
+   * this storage backend keeps files on a local disk the current process
+   * can read directly. Optional -- a real object-storage backend (S3, etc.)
+   * has no local path to give and simply won't implement this. Only used
+   * by the apply-context endpoint (apps/web) as a personal/local-dev
+   * convenience so a browser-automation tool with filesystem access (e.g.
+   * Claude in Chrome's file upload) can attach the resume directly by path
+   * instead of the app needing to serve/download the bytes over HTTP.
+   */
+  getLocalPath?(objectKey: string): string;
 }
 
 /**
@@ -61,6 +72,10 @@ export class LocalDiskResumeStorage implements ResumeStorage {
 
   async delete(objectKey: string): Promise<void> {
     await rm(this.pathFor(objectKey), { force: true });
+  }
+
+  getLocalPath(objectKey: string): string {
+    return this.pathFor(objectKey);
   }
 }
 

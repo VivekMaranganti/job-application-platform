@@ -17,10 +17,9 @@ export function JobFeedTab() {
   const { profile, loading: profileLoading } = useProfile();
   const { filters, loading: filtersLoading } = useFilters();
   const { answers } = useRequiredInfo();
-  const { jobs, applications, loading: jobsLoading, setStatus, clearStatus, simulateSubmit } = useJobFeed();
+  const { jobs, applications, loading: jobsLoading, setStatus, clearStatus, refreshApplications } = useJobFeed();
   const { entriesByApplication, loadingApplicationId, loadEntries } = useActivityLog();
   const [showFilteredOut, setShowFilteredOut] = useState(false);
-  const [simulateNote, setSimulateNote] = useState<Record<string, string>>({});
   const [expandedLogApplicationId, setExpandedLogApplicationId] = useState<string | null>(null);
 
   const loading = profileLoading || filtersLoading || jobsLoading || !profile || !filters || !jobs;
@@ -49,12 +48,6 @@ export function JobFeedTab() {
 
   const autoFields = REQUIRED_FIELDS.filter((f) => answers?.[f.id]?.mode === "auto");
   const manualFields = REQUIRED_FIELDS.filter((f) => answers?.[f.id]?.mode !== "auto");
-
-  const confirmApply = async (jobId: string, company: string) => {
-    const data = await simulateSubmit(jobId);
-    setSimulateNote((prev) => ({ ...prev, [jobId]: data.note }));
-    void company;
-  };
 
   const toggleActivityLog = (applicationId: string) => {
     if (expandedLogApplicationId === applicationId) {
@@ -150,13 +143,15 @@ export function JobFeedTab() {
                   <li>Auto-filled fields: {autoFields.map((f) => f.label).join(", ") || "none set"}</li>
                   <li>You&apos;ll be prompted live for: {manualFields.map((f) => f.label).join(", ") || "nothing — all fields are automatic"}</li>
                 </ul>
-                <div className="text-xs text-bronze bg-bronze/[0.08] border border-bronze/25 rounded px-2.5 py-1.5 my-2.5">
-                  The live apply agent isn&apos;t connected yet (issue #4), so confirming here just records what would
-                  have been sent — nothing is actually submitted to {job.company}.
+                <div className="text-xs text-ledger bg-ledger/[0.06] border border-ledger/20 rounded px-2.5 py-1.5 my-2.5 leading-relaxed">
+                  Ready to apply — ask Claude, e.g. &ldquo;Apply to {job.title} at {job.company} for me.&rdquo; Claude
+                  opens the application via Claude in Chrome, fills what it can from your saved info, and checks with
+                  you before submitting anything. This app records the real result (status and activity log) once
+                  that session finishes — refresh below to see it.
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => confirmApply(job.id, job.company)} className={primaryButtonClass}>
-                    Confirm (simulated)
+                  <button onClick={() => refreshApplications()} className={ghostButtonClass}>
+                    Refresh status
                   </button>
                   <button onClick={() => clearStatus(job.id)} className={ghostButtonClass}>
                     Cancel
@@ -165,10 +160,31 @@ export function JobFeedTab() {
               </div>
             )}
 
+            {(status === "in_progress" || status === "needs_input" || status === "ready_for_review") && (
+              <div className="mt-3.5 pt-3.5 border-t border-line">
+                <div className="text-[13.5px] text-muted">
+                  Apply session in progress ({status.replace(/_/g, " ")})
+                  {status === "ready_for_review" ? " — Claude is waiting on your confirmation in that session." : "."}
+                </div>
+                <button onClick={() => refreshApplications()} className={`${ghostButtonClass} mt-2`}>
+                  Refresh status
+                </button>
+              </div>
+            )}
+
+            {status === "failed" && (
+              <div className="mt-3.5 pt-3.5 border-t border-line">
+                <div className="text-[13.5px] text-muted">This application didn&apos;t go through. Check the activity log or ask Claude what happened.</div>
+                <button onClick={() => clearStatus(job.id)} className={`${ghostButtonClass} mt-2`}>
+                  Reset
+                </button>
+              </div>
+            )}
+
             {status === "submitted" && (
               <div className="mt-3">
                 <div className="flex items-center gap-1.5 text-[12.5px] text-ledger">
-                  <Check size={13} /> {simulateNote[job.id] ?? "Recorded (simulated)."}
+                  <Check size={13} /> Submitted.
                 </div>
                 {application && (
                   <>

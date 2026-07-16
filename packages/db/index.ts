@@ -19,3 +19,4 @@ export {
   resolveRequiredInfoModeForSave,
 } from "./lib/policy/criminal-history-jurisdiction";
 export type { Jurisdiction } from "./lib/policy/criminal-history-jurisdiction";
+export { parseJurisdiction } from "./lib/policy/jurisdiction";

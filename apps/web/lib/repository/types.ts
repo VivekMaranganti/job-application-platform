@@ -37,7 +37,12 @@ export interface Repository {
   getProfile(userId: string): Promise<Profile>;
   saveProfile(
     userId: string,
-    patch: Partial<Pick<Profile, "locations" | "levels" | "target_titles">>
+    patch: Partial<
+      Pick<
+        Profile,
+        "locations" | "levels" | "target_titles" | "full_name" | "phone" | "contact_email" | "linkedin_url" | "portfolio_url"
+      >
+    >
   ): Promise<Profile>;
   saveResume(
     userId: string,
@@ -48,6 +53,15 @@ export interface Repository {
   getResumeFile(
     userId: string
   ): Promise<{ fileName: string; mimeType: string; buffer: Buffer } | null>;
+  /**
+   * Local-dev convenience: an absolute filesystem path to the resume file,
+   * if the configured storage backend keeps one (see
+   * packages/db/lib/resume-storage.ts's `getLocalPath`). Returns null both
+   * when there's no resume and when the storage backend has no local path
+   * to give (e.g. a future S3 backend) -- callers must treat both cases the
+   * same way, falling back to `getResumeFile` bytes instead.
+   */
+  getResumeFilePath(userId: string): Promise<string | null>;
 
   // --- Filters -----------------------------------------------------------
   getFilters(userId: string): Promise<Filters>;

@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type { BoardConfig } from "./config.ts";
 import type { GreenhouseJob } from "./types.ts";
+import { inferEmploymentTypeFromTitle, inferLevelFromTitle } from "../shared/title-inference.ts";
 
 // ---------------------------------------------------------------------------
 // Raw Greenhouse job -> JobListing shape.
@@ -78,45 +79,10 @@ function inferRemoteType(locationName: string | null): NormalizedJobListing["rem
   return null;
 }
 
-const LEVEL_PATTERNS: Array<{ pattern: RegExp; level: NonNullable<NormalizedJobListing["level"]> }> = [
-  // Order matters: check the most specific/senior signals first so e.g.
-  // "Senior Director" resolves to Director-or-above rather than "Senior".
-  { pattern: /\b(chief|ceo|cto|cfo|coo|ciso|cmo|cpo|chro|evp|svp|vp|vice president)\b/i, level: "Executive / VP" },
-  { pattern: /\bdirector\b/i, level: "Director" },
-  { pattern: /\b(staff|principal)\b/i, level: "Staff / Principal" },
-  { pattern: /\b(senior|sr\.?)\b/i, level: "Senior" },
-  { pattern: /\b(intern(ship)?|entry[ -]level|new grad|junior|jr\.?|associate)\b/i, level: "Entry level" },
-];
-
-/**
- * Infers seniority level from the job title only when a clear keyword is
- * present. Deliberately does NOT fall back to "Mid level" or "Manager" for
- * titles with no keyword match: a bare title like "Product Manager" is
- * genuinely ambiguous (no signal either way between entry/mid), and
- * "manager" as a bare keyword is itself ambiguous between an IC title
- * ("Product Manager", "Program Manager") and a people-manager level
- * ("Engineering Manager") -- Greenhouse's API gives us nothing to
- * disambiguate that, so both are left null rather than guessed.
- */
-function inferLevel(title: string): NormalizedJobListing["level"] {
-  for (const { pattern, level } of LEVEL_PATTERNS) {
-    if (pattern.test(title)) return level;
-  }
-  return null;
-}
-
-/**
- * Same "only when confident" principle as inferLevel. No fallback to
- * "Full-time": most Greenhouse postings likely are full-time, but assuming
- * that for every listing without an explicit part-time/contract/internship
- * marker would be an assumption, not an inference from the data.
- */
-function inferEmploymentType(title: string): NormalizedJobListing["employmentType"] {
-  if (/\bintern(ship)?\b/i.test(title)) return "Internship";
-  if (/\bcontract(or)?\b/i.test(title)) return "Contract";
-  if (/\bpart[ -]?time\b/i.test(title)) return "Part-time";
-  return null;
-}
+// Level/employment-type inference from title moved to
+// ../shared/title-inference.ts once the Lever connector needed the
+// identical logic -- see that file for the "infer only when confident"
+// rationale, unchanged from what lived here originally.
 
 function parseDatePosted(job: GreenhouseJob): Date | null {
   const raw = job.first_published ?? job.updated_at;
@@ -134,8 +100,8 @@ export function normalizeGreenhouseJob(job: GreenhouseJob, board: BoardConfig): 
     company: board.companyName ?? job.company_name ?? board.boardToken,
     location: locationName,
     remoteType: inferRemoteType(locationName),
-    employmentType: inferEmploymentType(job.title),
-    level: inferLevel(job.title),
+    employmentType: inferEmploymentTypeFromTitle(job.title),
+    level: inferLevelFromTitle(job.title),
     // Greenhouse's public Job Board API has no structured compensation
     // field on any board inspected during development (gitlab, asana,
     // squarespace, elastic all lack one). Some postings do show a pay range

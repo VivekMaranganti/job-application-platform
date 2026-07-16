@@ -88,6 +88,11 @@ function emptyProfile(userId: string): Profile {
     locations: [],
     levels: [],
     target_titles: [],
+    full_name: null,
+    phone: null,
+    contact_email: null,
+    linkedin_url: null,
+    portfolio_url: null,
   };
 }
 
@@ -118,6 +123,16 @@ async function toDomainProfile(userId: string, row: PrismaProfile | null): Promi
     locations: row.locations,
     levels: row.levels.map(fromPrismaLevel),
     target_titles: row.targetTitles,
+    full_name: row.fullName,
+    phone: row.phone,
+    // NOTE: this is the raw column, not yet falling back to the account's
+    // login email -- that fallback happens where both Profile and the
+    // logged-in user's email are already in scope (e.g. the apply-context
+    // endpoint), not here, so this repository method doesn't need to take
+    // on an extra User lookup just to populate one field.
+    contact_email: row.contactEmail,
+    linkedin_url: row.linkedinUrl,
+    portfolio_url: row.portfolioUrl,
   };
 }
 
@@ -150,6 +165,11 @@ export const postgresRepository: Repository = {
       ...(patch.locations !== undefined && { locations: patch.locations }),
       ...(patch.levels !== undefined && { levels: patch.levels.map(toPrismaLevel) }),
       ...(patch.target_titles !== undefined && { targetTitles: patch.target_titles }),
+      ...(patch.full_name !== undefined && { fullName: patch.full_name }),
+      ...(patch.phone !== undefined && { phone: patch.phone }),
+      ...(patch.contact_email !== undefined && { contactEmail: patch.contact_email }),
+      ...(patch.linkedin_url !== undefined && { linkedinUrl: patch.linkedin_url }),
+      ...(patch.portfolio_url !== undefined && { portfolioUrl: patch.portfolio_url }),
     };
     const row = await prisma.profile.upsert({
       where: { userId },
@@ -208,6 +228,15 @@ export const postgresRepository: Repository = {
     if (!buffer) return null;
 
     return { fileName: row.resumeFileName, mimeType: row.resumeMimeType, buffer };
+  },
+
+  async getResumeFilePath(userId) {
+    const row = await prisma.profile.findUnique({ where: { userId } });
+    if (!row?.resumeFileUrlEncrypted || !resumeStorage.getLocalPath) return null;
+
+    const resumeUrl = await decryptField(fromPrismaBytes(row.resumeFileUrlEncrypted));
+    if (!resumeUrl) return null;
+    return resumeStorage.getLocalPath(objectKeyFromResumeUrl(resumeUrl));
   },
 
   // --- Filters -------------------------------------------------------------

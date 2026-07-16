@@ -53,16 +53,12 @@ export function useJobFeed() {
     });
   }, []);
 
-  // TODO(issue #4 — Apply agent): this calls the simulate-submit stub, not a
-  // real apply agent. See app/api/applications/[jobListingId]/simulate-submit/route.ts.
-  const simulateSubmit = useCallback(async (jobListingId: string) => {
-    const res = await fetch(`/api/applications/${encodeURIComponent(jobListingId)}/simulate-submit`, {
-      method: "POST",
-    });
-    const data: { application: Application; note: string } = await res.json();
-    setApplications((prev) => ({ ...prev, [jobListingId]: data.application }));
-    return data;
-  }, []);
+  // Refetches Application status/list -- used to pick up progress the apply
+  // agent made in a live Claude-in-Chrome session (a separate process from
+  // this tab), not something this hook drives itself. See
+  // app/api/applications/[jobListingId]/apply-context/route.ts and
+  // .../log-entry/route.ts for what the agent actually calls while working.
+  const refreshApplications = loadApplications;
 
-  return { jobs, applications, loading, setStatus, clearStatus, simulateSubmit };
+  return { jobs, applications, loading, setStatus, clearStatus, refreshApplications };
 }

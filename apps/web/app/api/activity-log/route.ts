@@ -5,13 +5,14 @@ import { requireUserId } from "@/lib/require-user";
 // ---------------------------------------------------------------------------
 // Activity log (issue #6).
 //
-// Read-only from the client on purpose -- there is deliberately no POST
-// here. Log entries are only ever written server-side (see
-// app/api/applications/[jobListingId]/simulate-submit/route.ts, and
-// eventually issue #4's real apply agent), never in response to a client
-// request body. That avoids a client being able to fabricate/backdate
-// arbitrary entries in its own audit trail, or (worse, if scoping were ever
-// misapplied) someone else's.
+// This file is read-only -- writes live in
+// app/api/applications/[jobListingId]/log-entry/route.ts, scoped per
+// application on purpose (see that file's header for the trust model: an
+// entry is self-reported by whoever performed the action, same as it would
+// have been from the hosted apply-agent service). There's no unscoped
+// "write any entry" route, and value_category is always a caller-supplied
+// label, never free text -- see lib/types.ts ApplicationLogEntry's doc
+// comment for why a raw answer value can never travel through this system.
 //
 // Always scoped to the caller's userId -- repository.listApplicationLogEntries
 // enforces that at the query level, not just here.

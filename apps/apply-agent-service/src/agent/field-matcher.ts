@@ -1,9 +1,8 @@
-import { isCriminalHistoryAutoModeAllowed } from "auto-job-applier-db";
+import { isCriminalHistoryAutoModeAllowed, parseJurisdiction } from "auto-job-applier-db";
 import type { ExtractedField } from "../browser/dom-extraction";
 import type { ApplicationContext, RequiredInfoAnswerContext } from "../db/context";
 import type { FieldValueCategory } from "../protocol/events";
 import { classifyFields } from "./llm-client";
-import { parseJurisdiction } from "./jurisdiction";
 import { config } from "../config";
 
 // ---------------------------------------------------------------------------

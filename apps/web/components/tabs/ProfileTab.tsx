@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { FileText, Upload } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
 import { LEVELS } from "@/lib/types";
-import { ChipInput, Label, SectionCard, ToggleGroup, ghostButtonClass, inlineLinkClass } from "@/components/ui/primitives";
+import { ChipInput, Label, SectionCard, ToggleGroup, ghostButtonClass, inlineLinkClass, inputClass } from "@/components/ui/primitives";
 
 function formatBytes(bytes: number | null): string {
   if (!bytes) return "0 KB";
@@ -14,7 +14,8 @@ function formatBytes(bytes: number | null): string {
 }
 
 export function ProfileTab({ onGoToRequiredInfo }: { onGoToRequiredInfo: () => void }) {
-  const { profile, loading, setLocations, setLevels, setTargetTitles, uploadResume, removeResume } = useProfile();
+  const { profile, loading, setLocations, setLevels, setTargetTitles, setContactField, uploadResume, removeResume } =
+    useProfile();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (loading || !profile) {
@@ -27,6 +28,49 @@ export function ProfileTab({ onGoToRequiredInfo }: { onGoToRequiredInfo: () => v
 
   return (
     <div>
+      <Label>Contact information</Label>
+      <SectionCard>
+        <div className="grid grid-cols-2 gap-3">
+          <input
+            className={inputClass}
+            placeholder="Full name"
+            defaultValue={profile.full_name ?? ""}
+            onBlur={(e) => setContactField("full_name", e.target.value)}
+          />
+          <input
+            className={inputClass}
+            placeholder="Phone"
+            type="tel"
+            defaultValue={profile.phone ?? ""}
+            onBlur={(e) => setContactField("phone", e.target.value)}
+          />
+          <input
+            className={inputClass}
+            placeholder="Contact email (defaults to your login email)"
+            type="email"
+            defaultValue={profile.contact_email ?? ""}
+            onBlur={(e) => setContactField("contact_email", e.target.value)}
+          />
+          <input
+            className={inputClass}
+            placeholder="LinkedIn URL"
+            type="url"
+            defaultValue={profile.linkedin_url ?? ""}
+            onBlur={(e) => setContactField("linkedin_url", e.target.value)}
+          />
+          <input
+            className={`${inputClass} col-span-2`}
+            placeholder="Portfolio / website URL"
+            type="url"
+            defaultValue={profile.portfolio_url ?? ""}
+            onBlur={(e) => setContactField("portfolio_url", e.target.value)}
+          />
+        </div>
+        <div className="mt-3 text-[12.5px] text-muted">
+          Used to auto-fill name/contact fields when the apply agent fills out an application.
+        </div>
+      </SectionCard>
+
       <Label>Resume</Label>
       <SectionCard>
         {!profile.resume_file_name ? (

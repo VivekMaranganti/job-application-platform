@@ -15,3 +15,7 @@ prisma/generated/
 # companies to track, same convention as .env/.env.example above.
 # See connectors/greenhouse/boards.example.json for the format.
 connectors/greenhouse/boards.json
+
+# Lever connector site config -- same convention. See
+# connectors/lever/sites.example.json for the format.
+connectors/lever/sites.json

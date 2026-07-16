@@ -26,7 +26,15 @@ export function useProfile() {
     };
   }, []);
 
-  const persist = useCallback((patch: Partial<Pick<Profile, "locations" | "levels" | "target_titles">>) => {
+  const persist = useCallback(
+    (
+      patch: Partial<
+        Pick<
+          Profile,
+          "locations" | "levels" | "target_titles" | "full_name" | "phone" | "contact_email" | "linkedin_url" | "portfolio_url"
+        >
+      >
+    ) => {
     setSaveState("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
@@ -66,6 +74,15 @@ export function useProfile() {
     [persist]
   );
 
+  const setContactField = useCallback(
+    (field: "full_name" | "phone" | "contact_email" | "linkedin_url" | "portfolio_url", value: string) => {
+      const normalized = value.trim() === "" ? null : value;
+      setProfile((prev) => (prev ? { ...prev, [field]: normalized } : prev));
+      persist({ [field]: normalized });
+    },
+    [persist]
+  );
+
   const uploadResume = useCallback(async (file: File) => {
     setSaveState("saving");
     const form = new FormData();
@@ -83,5 +100,5 @@ export function useProfile() {
     setProfile(updated);
   }, []);
 
-  return { profile, loading, saveState, setLocations, setLevels, setTargetTitles, uploadResume, removeResume };
+  return { profile, loading, saveState, setLocations, setLevels, setTargetTitles, setContactField, uploadResume, removeResume };
 }

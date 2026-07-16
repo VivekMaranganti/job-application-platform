@@ -185,6 +185,22 @@ model Profile {
   levels       ProfileLevel[] @default([])
   targetTitles String[]       @default([]) @map("target_titles")
 
+  // Contact fields (added so the apply agent has a real data source for the
+  // most common non-required-info application fields, instead of always
+  // yielding to the human for name/phone/email/links -- see
+  // apps/apply-agent-service's field-matcher.ts "no data source yet" note).
+  // Not sensitive in the same way RequiredInfoAnswer values are (immigration
+  // status, disability, etc.), so these are plain columns, not encrypted --
+  // same treatment as resumeFileName/resumeFileSize above.
+  fullName      String? @map("full_name")
+  phone         String?
+  // Contact email for applications, distinct from the login email on User
+  // (which is used for magic-link auth). Falls back to User.email in the
+  // application layer when null -- see apps/web/lib/repository/mapping.ts.
+  contactEmail  String? @map("contact_email")
+  linkedinUrl   String? @map("linkedin_url")
+  portfolioUrl  String? @map("portfolio_url")
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("profiles")

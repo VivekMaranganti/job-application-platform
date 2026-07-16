@@ -86,6 +86,17 @@ export interface Profile {
   locations: string[];
   levels: Level[];
   target_titles: string[];
+  /**
+   * Contact fields (added post-launch so the apply agent has a real data
+   * source for name/phone/email/links instead of always yielding to the
+   * human for them). `contact_email` is distinct from the account's login
+   * email -- the API falls back to the login email when this is null.
+   */
+  full_name: string | null;
+  phone: string | null;
+  contact_email: string | null;
+  linkedin_url: string | null;
+  portfolio_url: string | null;
 }
 
 // ---------------------------------------------------------------------------

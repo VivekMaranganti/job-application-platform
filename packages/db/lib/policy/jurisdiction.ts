@@ -1,4 +1,4 @@
-import type { Jurisdiction } from "auto-job-applier-db";
+import type { Jurisdiction } from "./criminal-history-jurisdiction";
 
 // ---------------------------------------------------------------------------
 // Best-effort parse of `JobListing.location` (free text from whatever ATS
