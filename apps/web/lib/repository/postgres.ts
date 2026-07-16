@@ -20,6 +20,7 @@ import type {
   CompanySize,
 } from "@/lib/types";
 import type { Repository } from "./types";
+import { resolveRequiredInfoModeForSave } from "@/lib/policy/criminal-history-jurisdiction";
 import {
   fromPrismaApplicationStatus,
   fromPrismaCompanySize,
@@ -271,6 +272,13 @@ export const postgresRepository: Repository = {
 
   async saveRequiredInfoAnswer(userId, fieldId, patch) {
     await ensureUser(userId);
+    // See apps/web/lib/policy/README.md: RequiredInfoAnswer.mode is a
+    // single global per-user setting with no concept of which job/
+    // jurisdiction it'll be used for, so `criminal_history` can never
+    // honestly be persisted as `auto` here -- this unconditionally
+    // downgrades that request to `manual` (issue #7). Every other field
+    // passes through unchanged.
+    const mode = resolveRequiredInfoModeForSave(fieldId, patch.mode);
     let valueEncrypted: Uint8Array<ArrayBuffer> | null | undefined;
     if (patch.value !== undefined) {
       valueEncrypted = toPrismaBytes(await encryptField(patch.value));
@@ -280,11 +288,11 @@ export const postgresRepository: Repository = {
       create: {
         userId,
         fieldId,
-        mode: patch.mode !== undefined ? toPrismaMode(patch.mode) : undefined,
+        mode: mode !== undefined ? toPrismaMode(mode) : undefined,
         valueEncrypted,
       },
       update: {
-        ...(patch.mode !== undefined && { mode: toPrismaMode(patch.mode) }),
+        ...(mode !== undefined && { mode: toPrismaMode(mode) }),
         ...(valueEncrypted !== undefined && { valueEncrypted }),
       },
     });
