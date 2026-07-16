@@ -9,7 +9,14 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "declaration": false
+    "declaration": false,
+    // Lets connectors/**/*.ts use explicit ".ts" specifiers in relative
+    // imports (e.g. "./config.ts") -- required so the same files can also be
+    // run directly with `node` (see connectors/greenhouse/README.md): Node's
+    // native TS support resolves relative specifiers like its ESM resolver
+    // (no implicit extension resolution), unlike ts-node/bundlers. Requires
+    // noEmit, which this project already has.
+    "allowImportingTsExtensions": true
   },
-  "include": ["lib/**/*.ts"]
+  "include": ["lib/**/*.ts", "connectors/**/*.ts"]
 }

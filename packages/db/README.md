@@ -234,6 +234,16 @@ domain type needed that weren't in the original schema --
 `resume_file_name`, `resume_file_size`, `resume_mime_type` -- see
 `prisma/migrations/20260716063000_add_profile_resume_metadata/`.
 
+## Connectors
+
+`connectors/greenhouse/` (issue #5) is a standalone script that fetches
+postings from the public Greenhouse Job Board API, normalizes them into
+`JobListing`'s free-text classifier shape, and upserts into `job_listings`
+keyed on the `(source_connector, external_id)` idempotency constraint above.
+See `connectors/greenhouse/README.md` for how to run it, how boards to track
+are configured, exactly which fields get inferred vs. left null and why, and
+open follow-ups (scheduling, pagination, additional ATS connectors).
+
 ## Open questions / things flagged rather than guessed
 
 - **Production `KeyProvider`.** Which KMS backs `FIELD_ENCRYPTION_KEY` in
