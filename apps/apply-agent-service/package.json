@@ -1,0 +1,26 @@
+{
+  "name": "apply-agent-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Live browser-orchestration service for the apply agent (issue #4). Runs one Playwright session per in-progress Application, streams a private structured event log over a control WebSocket, and never auto-submits -- see src/session/apply-session.ts.",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
+    "auto-job-applier-db": "*",
+    "mammoth": "^1.12.0",
+    "playwright-core": "^1.49.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/ws": "^8",
+    "tsx": "^4.19.0",
+    "typescript": "^5"
+  }
+}

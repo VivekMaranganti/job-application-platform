@@ -1,0 +1,16 @@
+{
+  "name": "auto-job-applier",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Monorepo root. apps/web is the Next.js app (issue #1); packages/db is the Postgres/Prisma schema package (issue #2, built on branch agent/postgres-schema and merged in here).",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=web",
+    "build": "npm run build --workspace=web",
+    "lint": "npm run lint --workspace=web",
+    "db:seed:greenhouse": "npm run db:seed:greenhouse --workspace=auto-job-applier-db"
+  }
+}

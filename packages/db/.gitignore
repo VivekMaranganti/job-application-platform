@@ -1,0 +1,17 @@
+# Node / Prisma
+node_modules/
+.env
+.env.*.local
+generated/
+prisma/generated/
+*.tsbuildinfo
+
+
+# Dev-only local resume storage (LocalDiskResumeStorage) -- never commit
+# actual resume files.
+.data/
+
+# Greenhouse connector board config -- deployment-specific list of which
+# companies to track, same convention as .env/.env.example above.
+# See connectors/greenhouse/boards.example.json for the format.
+connectors/greenhouse/boards.json

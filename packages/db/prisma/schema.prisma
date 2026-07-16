@@ -1,0 +1,326 @@
+// ---------------------------------------------------------------------------
+// auto-job-applier — Postgres schema (issue #2)
+//
+// See /README.md for how to run migrations locally, and the "Encryption at
+// rest" section below for how sensitive columns are handled.
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// No pgcrypto / DB-side crypto extension is used anywhere in this schema.
+// `gen_random_uuid()` below is core Postgres (built in since PG13), not the
+// pgcrypto extension, so primary-key generation needs zero extensions.
+//
+// This is deliberate: the encryption boundary for sensitive data sits
+// entirely in the application layer (see lib/encryption.ts), not in
+// Postgres. The database only ever sees opaque ciphertext bytes for the
+// sensitive columns below (resumeFileUrlEncrypted, valueEncrypted) — it has
+// no ability to encrypt/decrypt/inspect them, and never holds a key. See
+// README "Encryption at rest" for the full rationale.
+
+// ===========================================================================
+// Enums
+//
+// Closed, user-facing value sets are modeled as native Postgres enums (via
+// Prisma's @map) so the exact display label is stored in the database while
+// the generated client exposes a friendly identifier. This gives us real
+// DB-level validation for dropdown-style fields instead of relying solely on
+// application code.
+// ===========================================================================
+
+/// Profile.levels — seniority levels a user is targeting.
+enum ProfileLevel {
+  ENTRY_LEVEL     @map("Entry level")
+  MID_LEVEL       @map("Mid level")
+  SENIOR          @map("Senior")
+  STAFF_PRINCIPAL @map("Staff / Principal")
+  MANAGER         @map("Manager")
+  DIRECTOR        @map("Director")
+  EXECUTIVE_VP    @map("Executive / VP")
+}
+
+/// Filters.work_arrangement
+enum WorkArrangement {
+  REMOTE @map("Remote")
+  HYBRID @map("Hybrid")
+  ONSITE @map("Onsite")
+}
+
+/// Filters.employment_type
+enum EmploymentType {
+  FULL_TIME  @map("Full-time")
+  PART_TIME  @map("Part-time")
+  CONTRACT   @map("Contract")
+  INTERNSHIP @map("Internship")
+}
+
+/// Filters.company_size
+enum CompanySize {
+  STARTUP    @map("Startup (1-50)")
+  SMALL_MID  @map("Small-mid (51-500)")
+  LARGE      @map("Large (501-5,000)")
+  ENTERPRISE @map("Enterprise (5,000+)")
+}
+
+/// Filters.date_posted
+enum DatePosted {
+  ANY_TIME   @map("Any time")
+  PAST_DAY   @map("Past 24 hours")
+  PAST_WEEK  @map("Past week")
+  PAST_MONTH @map("Past month")
+}
+
+/// RequiredInfoAnswer.mode — whether the agent may auto-fill this field from
+/// `value`, or must always stop and ask the user.
+enum AnswerMode {
+  AUTO   @map("auto")
+  MANUAL @map("manual")
+}
+
+/// Application.status — the application lifecycle / pipeline stage.
+enum ApplicationStatus {
+  MATCHED          @map("matched")
+  REVIEWING        @map("reviewing")
+  IN_PROGRESS      @map("in_progress")
+  NEEDS_INPUT      @map("needs_input")
+  READY_FOR_REVIEW @map("ready_for_review")
+  SUBMITTED        @map("submitted")
+  SKIPPED          @map("skipped")
+  FAILED           @map("failed")
+}
+
+/// ApplicationLogEntry.source — where a submitted field's value came from.
+enum LogEntrySource {
+  AUTO               @map("auto")
+  USER_PROVIDED_LIVE @map("user-provided-live")
+}
+
+// ===========================================================================
+// Tables
+// ===========================================================================
+
+model User {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  profile               Profile?
+  filters               Filters?
+  requiredInfoAnswers   RequiredInfoAnswer[]
+  applications          Application[]
+  applicationLogEntries ApplicationLogEntry[]
+  loginTokens           LoginToken[]
+  sessions              Session[]
+
+  @@map("users")
+}
+
+/// A single-use magic-link token (issue #3's chosen auth strategy -- see
+/// apps/web/AUTH.md for the decision and reasoning). Issued by
+/// `POST /api/auth/request-login` and consumed by `GET /api/auth/verify`.
+///
+/// SENSITIVE, same rule as resume URLs / RequiredInfoAnswer values: only a
+/// SHA-256 hash of the raw token is ever stored (`tokenHash`), never the raw
+/// token itself -- see apps/web/lib/auth.ts. A leaked row is therefore
+/// useless to an attacker without also holding the original emailed link.
+model LoginToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("login_tokens")
+}
+
+/// A logged-in session, created once a LoginToken is successfully consumed.
+/// The raw session cookie value is never persisted -- only its SHA-256 hash
+/// (`tokenHash`), mirroring LoginToken above. `apps/web/lib/current-user.ts`
+/// hashes the incoming cookie and looks it up here on every request.
+model Session {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+/// One row per user. 1:1 with User — user_id is both the primary key and the
+/// foreign key, so every lookup is already scoped by tenant.
+///
+/// SENSITIVE: `resumeFileUrlEncrypted` holds ciphertext, not a plain URL.
+/// See README "Encryption at rest".
+model Profile {
+  userId String @id @map("user_id") @db.Uuid
+
+  // Ciphertext (AES-256-GCM, app-level) of the S3 object reference. Never
+  // store the plaintext URL in a separate column.
+  resumeFileUrlEncrypted Bytes?    @map("resume_file_url_encrypted")
+  resumeUploadedAt       DateTime? @map("resume_uploaded_at")
+  // Not sensitive (unlike the object reference above) -- plain columns so
+  // the UI can render the uploaded file's name/size without decrypting or
+  // fetching the file itself. Added when wiring the Postgres-backed
+  // Repository; see apps/web/lib/types.ts Profile for the domain shape.
+  resumeFileName         String?   @map("resume_file_name")
+  resumeFileSize         Int?      @map("resume_file_size")
+  resumeMimeType         String?   @map("resume_mime_type")
+
+  locations    String[]       @default([])
+  levels       ProfileLevel[] @default([])
+  targetTitles String[]       @default([]) @map("target_titles")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+/// One row per user. 1:1 with User.
+model Filters {
+  userId String @id @map("user_id") @db.Uuid
+
+  workArrangement     WorkArrangement[] @default([]) @map("work_arrangement")
+  employmentType      EmploymentType[]  @default([]) @map("employment_type")
+  companySize         CompanySize[]     @default([]) @map("company_size")
+  salaryMin           Int?              @map("salary_min")
+  datePosted          DatePosted        @default(ANY_TIME) @map("date_posted")
+  industries          String[]          @default([])
+  excludeCompanies    String[]          @default([]) @map("exclude_companies")
+  specialInstructions String?           @map("special_instructions") @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("filters")
+}
+
+/// One row per (user, field_id). Standard field_ids: work_auth, sponsorship,
+/// veteran, disability, race_ethnicity, gender, security_clearance,
+/// criminal_history — but field_id is intentionally free-text (not an enum)
+/// so new fields can be added without a migration. criminal_history is
+/// modeled like every other field at the schema level, but whether "auto"
+/// mode is legally permitted for it (issue #7 — ban-the-box / fair-chance
+/// hiring laws) is NOT something this table or Postgres enforces: it's a
+/// row-level CHECK-free `AnswerMode` column, same as every other field.
+/// Enforcement lives one layer up, in application code, because it depends
+/// on the *job's* jurisdiction, which this table has no column for: see
+/// apps/web/lib/policy/README.md and
+/// apps/web/lib/policy/criminal-history-jurisdiction.ts, which unconditionally
+/// downgrade `mode=auto` requests for criminal_history to `manual` at save
+/// time (apps/web/lib/repository/postgres.ts's saveRequiredInfoAnswer) until
+/// real legal sign-off exists per jurisdiction. A raw SQL write or future
+/// migration script that bypasses that repository method would bypass this
+/// gate too — this column alone does not stop `mode = AUTO` from being
+/// written for criminal_history.
+///
+/// SENSITIVE: `valueEncrypted` holds ciphertext, not plaintext. It is only
+/// meaningful when mode = AUTO. See README "Encryption at rest".
+model RequiredInfoAnswer {
+  userId  String @map("user_id") @db.Uuid
+  fieldId String @map("field_id")
+
+  mode           AnswerMode @default(MANUAL)
+  valueEncrypted Bytes?     @map("value_encrypted")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, fieldId])
+  @@map("required_info_answers")
+}
+
+/// Job postings pulled in from source connectors (job boards / ATSs).
+/// Not user-scoped — a listing is a shared, tenant-agnostic fact. Classifier
+/// fields (remoteType, employmentType, level, companySize) are deliberately
+/// free text rather than the enums used on Filters/Profile: connector data is
+/// heterogeneous and not guaranteed to match our closed vocabularies at
+/// ingestion time, and forcing an enum here would make ingestion brittle.
+/// rawPayload retains the untouched connector response for debugging /
+/// re-normalization when the mapping is wrong or the vocabulary drifts.
+model JobListing {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceConnector String @map("source_connector")
+  externalId      String @map("external_id")
+
+  title          String
+  company        String
+  location       String?
+  remoteType     String?   @map("remote_type")
+  employmentType String?   @map("employment_type")
+  level          String?
+  salaryMin      Int?      @map("salary_min")
+  salaryMax      Int?      @map("salary_max")
+  companySize    String?   @map("company_size")
+  industry       String?
+  datePosted     DateTime? @map("date_posted")
+  url            String
+
+  rawPayload Json @map("raw_payload")
+
+  applications Application[]
+
+  @@unique([sourceConnector, externalId], name: "sourceConnector_externalId")
+  @@index([sourceConnector])
+  @@index([datePosted])
+  @@map("job_listings")
+}
+
+/// A user's pursuit of a specific JobListing.
+model Application {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String            @map("user_id") @db.Uuid
+  jobListingId String            @map("job_listing_id") @db.Uuid
+  status       ApplicationStatus @default(MATCHED)
+  createdAt    DateTime          @default(now()) @map("created_at")
+  submittedAt  DateTime?         @map("submitted_at")
+
+  user       User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobListing JobListing            @relation(fields: [jobListingId], references: [id], onDelete: Restrict)
+  logEntries ApplicationLogEntry[]
+
+  // A user should have at most one Application per JobListing.
+  @@unique([userId, jobListingId])
+  @@index([userId])
+  @@index([jobListingId])
+  @@index([status])
+  @@map("applications")
+}
+
+/// Audit trail of what was submitted on a user's behalf during form-filling.
+///
+/// PRIVACY-CRITICAL: this table records `valueCategory` (a coarse label,
+/// e.g. "work_authorization", "veteran_status") and never the raw value that
+/// was typed/selected. There is intentionally NO column capable of holding a
+/// raw field value — do not add one. The soft length check below is defense
+/// in depth (raw free-text answers are unlikely to fit in a short category
+/// label) — not a substitute for callers doing the right thing.
+model ApplicationLogEntry {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String         @map("application_id") @db.Uuid
+  userId        String         @map("user_id") @db.Uuid
+  timestamp     DateTime       @default(now())
+  fieldLabel    String         @map("field_label")
+  valueCategory String         @map("value_category")
+  sentTo        String         @map("sent_to")
+  source        LogEntrySource
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([applicationId])
+  @@map("application_log_entries")
+}

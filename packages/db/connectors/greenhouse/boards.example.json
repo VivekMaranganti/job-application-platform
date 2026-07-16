@@ -1,0 +1,14 @@
+[
+  {
+    "boardToken": "gitlab",
+    "companyName": "GitLab",
+    "companySize": "Enterprise (5,000+)",
+    "industry": "Software"
+  },
+  {
+    "boardToken": "asana",
+    "companyName": "Asana",
+    "companySize": "Large (501-5,000)",
+    "industry": "Software"
+  }
+]

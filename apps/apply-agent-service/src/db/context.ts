@@ -1,0 +1,95 @@
+import { prisma, AnswerMode } from "auto-job-applier-db";
+
+// ---------------------------------------------------------------------------
+// Loads everything a session needs to start filling an application's form,
+// scoped and tenant-checked in one place.
+//
+// PRIVACY-CRITICAL: `requiredInfoAnswers` below only ever populates `value`
+// for fields whose `mode` is "auto". Manual-mode fields always come back
+// with `value: null` here -- regardless of whether a value happens to be
+// stored -- so the agent's field-matching code structurally never sees a
+// manual-mode answer; the human must supply it live (via a `field_input`
+// command) every time. This is enforced in this one function, not left to
+// callers to remember.
+// ---------------------------------------------------------------------------
+
+export interface JobListingContext {
+  id: string;
+  title: string;
+  company: string;
+  url: string;
+}
+
+export interface RequiredInfoAnswerContext {
+  fieldId: string;
+  mode: "auto" | "manual";
+  /** Decrypted value. Always null when mode === "manual" -- see file header. */
+  value: string | null;
+}
+
+export interface ApplicationContext {
+  userId: string;
+  applicationId: string;
+  jobListing: JobListingContext;
+  profile: {
+    locations: string[];
+    levels: string[];
+    targetTitles: string[];
+  };
+  requiredInfoAnswers: RequiredInfoAnswerContext[];
+}
+
+export class ApplicationNotFoundError extends Error {
+  constructor(applicationId: string) {
+    super(`No application ${applicationId} found for this user.`);
+    this.name = "ApplicationNotFoundError";
+  }
+}
+
+export async function loadApplicationContext(userId: string, applicationId: string): Promise<ApplicationContext> {
+  const application = await prisma.application.findUnique({
+    where: { id: applicationId },
+    include: { jobListing: true },
+  });
+  if (!application || application.userId !== userId) {
+    throw new ApplicationNotFoundError(applicationId);
+  }
+
+  const [profileRow, requiredInfoRows] = await Promise.all([
+    prisma.profile.findUnique({ where: { userId } }),
+    prisma.requiredInfoAnswer.findMany({ where: { userId } }),
+  ]);
+
+  // NOTE: decryptField is intentionally NOT imported/called for manual-mode
+  // rows below -- see the file header. Only `auto` mode ever reaches
+  // decryptField, imported lazily via a dynamic-free static import kept
+  // local to the auto branch would be awkward in TS, so instead we just
+  // never read `row.valueEncrypted` at all when mode is manual.
+  const { decryptField } = await import("auto-job-applier-db");
+  const requiredInfoAnswers: RequiredInfoAnswerContext[] = await Promise.all(
+    requiredInfoRows.map(async (row): Promise<RequiredInfoAnswerContext> => {
+      if (row.mode !== AnswerMode.AUTO) {
+        return { fieldId: row.fieldId, mode: "manual", value: null };
+      }
+      const value = row.valueEncrypted ? await decryptField(Buffer.from(row.valueEncrypted)) : null;
+      return { fieldId: row.fieldId, mode: "auto", value };
+    }),
+  );
+
+  return {
+    userId,
+    applicationId,
+    jobListing: {
+      id: application.jobListing.id,
+      title: application.jobListing.title,
+      company: application.jobListing.company,
+      url: application.jobListing.url,
+    },
+    profile: {
+      locations: profileRow?.locations ?? [],
+      levels: (profileRow?.levels ?? []).map(String),
+      targetTitles: profileRow?.targetTitles ?? [],
+    },
+    requiredInfoAnswers,
+  };
+}
