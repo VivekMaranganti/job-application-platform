@@ -1,5 +1,3 @@
-handoff-file.txt
-
 # Node / Prisma
 node_modules/
 .env
