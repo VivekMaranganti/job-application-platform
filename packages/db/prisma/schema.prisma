@@ -171,9 +171,20 @@ model Filters {
 /// veteran, disability, race_ethnicity, gender, security_clearance,
 /// criminal_history — but field_id is intentionally free-text (not an enum)
 /// so new fields can be added without a migration. criminal_history is
-/// modeled like every other field; whether "auto" mode is legally permitted
-/// for it in production is tracked separately in issue #7 and is NOT
-/// enforced here.
+/// modeled like every other field at the schema level, but whether "auto"
+/// mode is legally permitted for it (issue #7 — ban-the-box / fair-chance
+/// hiring laws) is NOT something this table or Postgres enforces: it's a
+/// row-level CHECK-free `AnswerMode` column, same as every other field.
+/// Enforcement lives one layer up, in application code, because it depends
+/// on the *job's* jurisdiction, which this table has no column for: see
+/// apps/web/lib/policy/README.md and
+/// apps/web/lib/policy/criminal-history-jurisdiction.ts, which unconditionally
+/// downgrade `mode=auto` requests for criminal_history to `manual` at save
+/// time (apps/web/lib/repository/postgres.ts's saveRequiredInfoAnswer) until
+/// real legal sign-off exists per jurisdiction. A raw SQL write or future
+/// migration script that bypasses that repository method would bypass this
+/// gate too — this column alone does not stop `mode = AUTO` from being
+/// written for criminal_history.
 ///
 /// SENSITIVE: `valueEncrypted` holds ciphertext, not plaintext. It is only
 /// meaningful when mode = AUTO. See README "Encryption at rest".
