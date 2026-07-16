@@ -42,13 +42,15 @@ import {
 // seam, wired together). See packages/db/README.md "Integrating with the
 // Next.js scaffold" for the mapping gap this file fills in.
 //
-// Auth (issue #3) isn't decided yet, so every request still resolves to
-// `MOCK_USER_ID` (lib/current-user.ts) rather than a real session. Unlike
-// the in-memory stub, Postgres enforces a real foreign key from every
-// user-scoped table to `users.id` -- `ensureUser` below lazily upserts that
-// row so the dev/mock user id has somewhere to point. Delete `ensureUser`
-// and its call sites once issue #3 lands with a real signup/session flow
-// that creates `users` rows itself.
+// Every request now resolves to a real, request-scoped user id (issue #3 --
+// see lib/current-user.ts / lib/auth.ts). Unlike the in-memory stub,
+// Postgres enforces a real foreign key from every user-scoped table to
+// `users.id`; this used to require a lazy-upsert helper (`ensureUser`) here
+// because there was no real signup flow to create that row. That's gone now
+// -- `lib/auth.ts`'s `requestLogin` creates the `users` row for real, at
+// signup/first-login, so every `userId` reaching this file is guaranteed to
+// already have a row (a session can only exist for a user that was created
+// there).
 // ---------------------------------------------------------------------------
 
 const RESUME_URL_PREFIX = "local-disk://";
@@ -70,14 +72,6 @@ function toPrismaBytes(buf: Buffer | null): Uint8Array<ArrayBuffer> | null {
 
 function fromPrismaBytes(bytes: Uint8Array | null | undefined): Buffer | null {
   return bytes ? Buffer.from(bytes) : null;
-}
-
-async function ensureUser(userId: string): Promise<void> {
-  await prisma.user.upsert({
-    where: { id: userId },
-    update: {},
-    create: { id: userId, email: `${userId}@dev.local` },
-  });
 }
 
 function emptyProfile(userId: string): Profile {
@@ -139,7 +133,6 @@ export const postgresRepository: Repository = {
   },
 
   async saveProfile(userId, patch) {
-    await ensureUser(userId);
     const data = {
       ...(patch.locations !== undefined && { locations: patch.locations }),
       ...(patch.levels !== undefined && { levels: patch.levels.map(toPrismaLevel) }),
@@ -154,7 +147,6 @@ export const postgresRepository: Repository = {
   },
 
   async saveResume(userId, file) {
-    await ensureUser(userId);
     const objectKey = `resumes/${userId}/${randomUUID()}`;
     await resumeStorage.put(objectKey, { buffer: file.buffer });
     const encryptedUrl = toPrismaBytes(await encryptField(`${RESUME_URL_PREFIX}${objectKey}`));
@@ -223,7 +215,6 @@ export const postgresRepository: Repository = {
   },
 
   async saveFilters(userId, patch) {
-    await ensureUser(userId);
     const data = {
       ...(patch.work_arrangement !== undefined && {
         workArrangement: patch.work_arrangement.map(toPrismaWorkArrangement),
@@ -270,7 +261,6 @@ export const postgresRepository: Repository = {
   },
 
   async saveRequiredInfoAnswer(userId, fieldId, patch) {
-    await ensureUser(userId);
     let valueEncrypted: Uint8Array<ArrayBuffer> | null | undefined;
     if (patch.value !== undefined) {
       valueEncrypted = toPrismaBytes(await encryptField(patch.value));
@@ -338,7 +328,6 @@ export const postgresRepository: Repository = {
   },
 
   async upsertApplicationStatus(userId, jobListingId, status: ApplicationStatus) {
-    await ensureUser(userId);
     const prismaStatus = toPrismaApplicationStatus(status);
     const submittedAt = status === "submitted" ? new Date() : undefined;
     const row = await prisma.application.upsert({

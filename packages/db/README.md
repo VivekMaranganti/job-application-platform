@@ -90,7 +90,13 @@ exercised end-to-end in this branch — do that before merging into
 One table per entity from issue #2: `users`, `profiles`, `filters`,
 `required_info_answers`, `job_listings`, `applications`,
 `application_log_entries` (see `prisma/schema.prisma` for the authoritative
-field list and comments). A few schema-level decisions worth calling out:
+field list and comments). Two more tables, `login_tokens` and `sessions`,
+were added afterwards to back issue #3's auth strategy (see
+`apps/web/AUTH.md` for the decision) -- both follow the same
+FK-to-`users`-with-cascade-delete and "sensitive column holds only a hash"
+patterns already established below, and only ever store a SHA-256 hash of
+their respective raw token, never the token itself. A few schema-level
+decisions worth calling out:
 
 - **Closed, user-facing value sets are native Postgres enums.** `levels`,
   `work_arrangement`, `employment_type`, `company_size`, `date_posted`,

@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { repository } from "@/lib/repository";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUserId } from "@/lib/require-user";
 import type { CompanySize, DatePosted, EmploymentType, WorkArrangement } from "@/lib/types";
 
 export async function GET() {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   const filters = await repository.getFilters(userId);
   return NextResponse.json(filters);
 }
@@ -21,7 +22,8 @@ interface FiltersPatchBody {
 }
 
 export async function PATCH(request: Request) {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   const body = (await request.json()) as FiltersPatchBody;
   const filters = await repository.saveFilters(userId, body);
   return NextResponse.json(filters);

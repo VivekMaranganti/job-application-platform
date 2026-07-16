@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUserId } from "@/lib/require-user";
 import {
   NoResumeError,
   TitleDerivationNotConfiguredError,
@@ -13,7 +13,8 @@ interface FinalizeBody {
 }
 
 export async function POST(request: Request) {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   const body = (await request.json()) as FinalizeBody;
   try {
     const result = await finalizeTitleDerivation(userId, body.questions ?? [], body.answers ?? {});

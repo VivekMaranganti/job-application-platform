@@ -1,22 +1,36 @@
+import { cookies } from "next/headers";
+import { SESSION_COOKIE_NAME, getUserForSessionToken, getUserIdForSessionToken } from "@/lib/auth";
+
 // ---------------------------------------------------------------------------
-// TODO(issue #3): This app is single-user for now. Auth strategy (sessions,
-// OAuth, magic link, etc.) is an open architectural decision tracked in
-// issue #3 and deliberately NOT decided here.
+// Issue #3: real request-scoped user resolution, replacing the
+// `MOCK_USER_ID` constant this file used to export.
 //
-// Every repository function still takes a `userId` argument so the
-// multi-tenancy plumbing is already in place — once issue #3 lands, swap
-// this constant for whatever derives the real user id from the request
-// (e.g. a session cookie or auth token) and thread it through
-// `getCurrentUserId(request)` instead of a hardcoded value.
+// Both functions read the session cookie via `next/headers`'s `cookies()`
+// rather than taking a `Request`/`cookies` argument explicitly. That API is
+// itself request-scoped (backed by Next.js's per-request AsyncLocalStorage)
+// and works identically in Route Handlers and Server Components without
+// threading a request object through every call site -- simpler for the ~9
+// API routes below than passing `request` into `getCurrentUserId(request)`
+// everywhere for no added benefit in the App Router.
+//
+// Both are `async` and both can return `null` now that there's a real
+// signed-out state (there wasn't one under the mock). Every call site must
+// handle that -- API routes should respond 401; Server Components should
+// redirect to /login (see app/page.tsx).
 // ---------------------------------------------------------------------------
 
-// A fixed UUID, not a human-readable slug: `users.id` is `@db.Uuid` in the
-// Postgres schema (issue #2), so this constant has to be a valid UUID for
-// the Postgres-backed Repository (postgres.ts) to use it directly as a
-// primary key / foreign key value.
-export const MOCK_USER_ID = "00000000-0000-0000-0000-000000000001";
+/** Resolves the current request's authenticated user id, or `null` if signed out. */
+export async function getCurrentUserId(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+  return getUserIdForSessionToken(token);
+}
 
-/** Placeholder for a future request-scoped lookup. Currently always returns the mock user. */
-export function getCurrentUserId(): string {
-  return MOCK_USER_ID;
+/** Resolves the current request's authenticated `{ id, email }`, or `null` if signed out. */
+export async function getCurrentUser(): Promise<{ id: string; email: string } | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+  return getUserForSessionToken(token);
 }
