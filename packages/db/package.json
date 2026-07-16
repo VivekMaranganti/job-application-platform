@@ -2,6 +2,7 @@
   "name": "auto-job-applier-db",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Postgres schema/migrations for the auto-job-applier data model (issue #2). Prisma is scoped to the database layer here; the Next.js app scaffold (issue #1) imports this schema/client as the Postgres-backed Repository implementation.",
   "main": "index.ts",
   "types": "index.ts",
