@@ -4,8 +4,13 @@ import type { JobListing } from "@/lib/types";
 // Stand-ins for what real ATS connectors (Greenhouse / Lever / Ashby /
 // Workday) would return, ported from the job-application-profile.jsx
 // prototype's MOCK_JOBS. Each carries a source_connector so it's clear
-// where it would come from once real connectors (a separate future issue)
-// are wired up.
+// where it would come from once real connectors (issue #5) are wired up.
+//
+// Not imported anywhere right now -- it backed the in-memory Repository
+// stub (removed once the Postgres-backed Repository, postgres.ts, landed),
+// which means `job_listings` is genuinely empty until issue #5's connector
+// ingests real listings. Left here as ready-made fixture data for that work
+// (or for a manual dev seed script) rather than deleted.
 // ---------------------------------------------------------------------------
 
 function daysAgo(n: number): string {

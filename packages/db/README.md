@@ -31,9 +31,13 @@ prisma/
   migrations/
     migration_lock.toml
     <timestamp>_init/migration.sql
+    <timestamp>_add_profile_resume_metadata/migration.sql
 lib/
+  client.ts                 # shared PrismaClient singleton (dev hot-reload safe)
   encryption.ts             # app-layer AES-256-GCM helper for sensitive columns
   encryption-provider.ts    # adapter matching the Next.js scaffold's EncryptionProvider shape
+  resume-storage.ts         # pluggable resume file storage (ResumeStorage), local-disk dev default
+index.ts                    # package entry point -- import everything through this
 .env.example                # DATABASE_URL / FIELD_ENCRYPTION_KEY placeholders
 ```
 
@@ -204,34 +208,51 @@ adapter over `encryptField`/`decryptField` shaped to match the scaffold's
 `EncryptionProvider` interface (`apps/web/lib/repository/encryption.ts`:
 `encrypt(plaintext: string): Promise<string>` /
 `decrypt(ciphertext: string): Promise<string>`, ciphertext as base64
-string). It isn't wired up as an explicit `implements EncryptionProvider`
-since the two packages are on unmerged branches with nothing to import from
-yet -- do that (or just re-point the scaffold's import at this file) at
-merge time.
+string). The Postgres-backed `Repository` (below) ended up calling
+`encryptField`/`decryptField` directly instead, since Prisma `Bytes` columns
+round-trip as `Buffer`/`Uint8Array` already -- going through the
+string/base64 adapter would just add an unneeded encode/decode step. The
+adapter is still here (and still satisfies `EncryptionProvider`
+structurally) for any future consumer that wants ciphertext as a string.
 
-**Not done here, left as a TODO for whoever wires up the Postgres-backed
-`Repository` implementation on the scaffold side:** a mapping helper between
-this package's Prisma client shape (camelCase fields, ciphertext for
-sensitive columns, e.g. `resumeFileUrlEncrypted: Buffer`) and the scaffold's
-domain types (`apps/web/lib/types.ts`: snake_case fields, plaintext, e.g.
-`resume_file_url: string`). This was deliberately skipped rather than
-guessed at -- the scaffold's `Repository` interface (`saveResume` takes a
-raw file buffer, not a URL) implies resume storage needs S3 upload logic
-this package doesn't own yet, so a mapping helper written now would either
-omit that or guess at an unsettled design. Build it once that's decided.
+**Done:** the Postgres-backed `Repository` implementation lives at
+`apps/web/lib/repository/postgres.ts`, wired up in
+`apps/web/lib/repository/index.ts` in place of the original in-memory stub.
+The camelCase/ciphertext (Prisma) <-> snake_case/plaintext (scaffold domain
+types) mapping this doc previously flagged as a TODO is
+`apps/web/lib/repository/mapping.ts` (enum literal mapping) plus a couple of
+small `Buffer`/`Uint8Array<ArrayBuffer>` conversion helpers at the top of
+`postgres.ts` (Prisma 6's generated `Bytes` type is `Uint8Array<ArrayBuffer>`,
+narrower than Node's `Buffer<ArrayBufferLike>`, so the two don't structurally
+unify without an explicit conversion). Resume storage is
+`packages/db/lib/resume-storage.ts`'s `ResumeStorage` interface -- pluggable
+the same way `KeyProvider` is; `LocalDiskResumeStorage` is the dev/test
+default, a real S3-backed implementation is still open (see below).
+
+This pass also added three plain (non-sensitive) `Profile` columns the
+domain type needed that weren't in the original schema --
+`resume_file_name`, `resume_file_size`, `resume_mime_type` -- see
+`prisma/migrations/20260716063000_add_profile_resume_metadata/`.
 
 ## Open questions / things flagged rather than guessed
 
 - **Production `KeyProvider`.** Which KMS backs `FIELD_ENCRYPTION_KEY` in
   production is unresolved, pending a hosting decision. The interface is
   ready; the implementation is not.
+- **Production `ResumeStorage`.** Same shape of open question as
+  `KeyProvider` above: which S3-compatible provider/bucket backs resume
+  storage in production is unresolved, pending the same hosting decision.
+  `LocalDiskResumeStorage` (the dev/test default) is explicitly not
+  sufficient for production -- see its doc comment in
+  `lib/resume-storage.ts`.
 - **`JobListing` classifier fields as free text vs. enum.** Flagged above —
   revisit once a connector-normalization pipeline exists and guarantees
   clean values.
-- **This migration has not been run against a live Postgres instance** in
-  this environment (no reachable DB/Docker daemon available while building
-  it). It was generated and schema-validated offline via `prisma migrate
-  diff`/`prisma validate`; do a real `prisma migrate deploy` against a
-  throwaway DB before merging to catch anything the offline diff can't
-  (e.g. actual constraint/extension behavior on your target Postgres
+- **Neither this migration nor the follow-up one adding the `Profile`
+  resume-metadata columns has been run against a live Postgres instance**
+  in this environment (no reachable DB/Docker daemon available while
+  building either). Both were generated and schema-validated offline via
+  `prisma migrate diff`/`prisma validate`; do a real `prisma migrate deploy`
+  against a throwaway DB before merging to catch anything the offline diff
+  can't (e.g. actual constraint/extension behavior on your target Postgres
   version).
