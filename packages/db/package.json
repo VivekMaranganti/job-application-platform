@@ -13,6 +13,7 @@
     "db:studio": "prisma studio",
     "db:format": "prisma format",
     "db:validate": "prisma validate",
+    "db:seed:greenhouse": "node connectors/greenhouse/run.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

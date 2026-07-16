@@ -332,6 +332,15 @@ Issue #6 asks this explicitly rather than wanting it silently resolved.
   admin/support-facing variant in this pass -- there is currently no code
   path anywhere in the app, support-facing or otherwise, that reads a
   sensitive field for anyone other than the owning user.
+## Connectors
+
+`connectors/greenhouse/` (issue #5) is a standalone script that fetches
+postings from the public Greenhouse Job Board API, normalizes them into
+`JobListing`'s free-text classifier shape, and upserts into `job_listings`
+keyed on the `(source_connector, external_id)` idempotency constraint above.
+See `connectors/greenhouse/README.md` for how to run it, how boards to track
+are configured, exactly which fields get inferred vs. left null and why, and
+open follow-ups (scheduling, pagination, additional ATS connectors).
 
 ## Open questions / things flagged rather than guessed
 
