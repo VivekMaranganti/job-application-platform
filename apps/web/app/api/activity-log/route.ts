@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { repository } from "@/lib/repository";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUserId } from "@/lib/require-user";
 
 // ---------------------------------------------------------------------------
 // Activity log (issue #6).
@@ -17,7 +17,8 @@ import { getCurrentUserId } from "@/lib/current-user";
 // enforces that at the query level, not just here.
 // ---------------------------------------------------------------------------
 export async function GET(request: Request) {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   const applicationId = new URL(request.url).searchParams.get("application_id") ?? undefined;
   const entries = await repository.listApplicationLogEntries(userId, applicationId);
   return NextResponse.json(entries);

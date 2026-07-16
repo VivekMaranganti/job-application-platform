@@ -116,8 +116,49 @@ model User {
   requiredInfoAnswers   RequiredInfoAnswer[]
   applications          Application[]
   applicationLogEntries ApplicationLogEntry[]
+  loginTokens           LoginToken[]
+  sessions              Session[]
 
   @@map("users")
+}
+
+/// A single-use magic-link token (issue #3's chosen auth strategy -- see
+/// apps/web/AUTH.md for the decision and reasoning). Issued by
+/// `POST /api/auth/request-login` and consumed by `GET /api/auth/verify`.
+///
+/// SENSITIVE, same rule as resume URLs / RequiredInfoAnswer values: only a
+/// SHA-256 hash of the raw token is ever stored (`tokenHash`), never the raw
+/// token itself -- see apps/web/lib/auth.ts. A leaked row is therefore
+/// useless to an attacker without also holding the original emailed link.
+model LoginToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  tokenHash  String    @unique @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  consumedAt DateTime? @map("consumed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("login_tokens")
+}
+
+/// A logged-in session, created once a LoginToken is successfully consumed.
+/// The raw session cookie value is never persisted -- only its SHA-256 hash
+/// (`tokenHash`), mirroring LoginToken above. `apps/web/lib/current-user.ts`
+/// hashes the incoming cookie and looks it up here on every request.
+model Session {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
 }
 
 /// One row per user. 1:1 with User — user_id is both the primary key and the

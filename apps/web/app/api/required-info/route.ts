@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { repository } from "@/lib/repository";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUserId } from "@/lib/require-user";
 import { REQUIRED_FIELDS, type RequiredFieldId, type RequiredFieldMode } from "@/lib/types";
 
 export async function GET() {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   const answers = await repository.getRequiredInfoAnswers(userId);
   const byField = new Map(answers.map((a) => [a.field_id, a]));
   // Always return a full row per known field (defaulting to manual/empty)
@@ -22,7 +23,8 @@ interface RequiredInfoPatchBody {
 }
 
 export async function PATCH(request: Request) {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   const body = (await request.json()) as RequiredInfoPatchBody;
   if (!body.field_id) {
     return NextResponse.json({ error: "field_id is required" }, { status: 400 });

@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUserId } from "@/lib/require-user";
 import { NoResumeError, TitleDerivationNotConfiguredError, startTitleDerivation } from "@/lib/title-derivation";
 
 export async function POST() {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   try {
     const result = await startTitleDerivation(userId);
     return NextResponse.json(result);

@@ -21,8 +21,11 @@ import type {
  * replaces it there, and nothing outside `lib/repository` should need to
  * change.
  *
- * All methods take `userId` explicitly (see lib/current-user.ts) so
- * multi-tenancy plumbing exists even though auth (issue #3) isn't decided.
+ * All methods take `userId` explicitly (see lib/current-user.ts) -- this
+ * multi-tenancy plumbing was added before auth (issue #3) was decided,
+ * specifically so the real session-backed `getCurrentUserId()` could be
+ * slotted in later (see AUTH.md) without changing this interface or any of
+ * its callers.
  *
  * Methods return/accept *decrypted* plaintext domain objects — see
  * encryption.ts. Sensitive fields (Profile.resume_file_url,

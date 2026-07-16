@@ -14,9 +14,12 @@ there is no in-memory fallback wired up anymore. Before running the app:
    `FIELD_ENCRYPTION_KEY` the same way). The simplest way to get both into
    this app's `next dev` process is to also place a `.env` at
    `apps/web/.env` with the same two variables.
-3. There is no auth yet (issue #3) -- every request resolves to a single
-   fixed dev user id (`lib/current-user.ts`), which the Postgres repository
-   lazily upserts a `users` row for on first write.
+3. Auth (issue #3) is a hand-rolled email magic-link + session-cookie flow
+   -- see `AUTH.md` for the decision and how it works. There is no real
+   email integration configured, so `/login` (and `POST
+   /api/auth/request-login`) surface the login link directly in dev mode
+   instead of actually sending an email -- sign in there before using the
+   rest of the app locally.
 4. Resume file bytes are stored via `ResumeStorage` (`packages/db/lib/resume-storage.ts`),
    not in Postgres. The dev default (`LocalDiskResumeStorage`) writes under
    `packages/db/.data/resumes` (gitignored) -- fine for local dev, **not**

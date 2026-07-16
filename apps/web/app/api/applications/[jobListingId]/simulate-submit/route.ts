@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { repository } from "@/lib/repository";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUserId } from "@/lib/require-user";
 import { REQUIRED_FIELDS } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
@@ -29,7 +29,8 @@ export async function POST(
   _request: Request,
   ctx: RouteContext<"/api/applications/[jobListingId]/simulate-submit">
 ) {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   const { jobListingId } = await ctx.params;
 
   const existing = await repository.getApplication(userId, jobListingId);

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { repository } from "@/lib/repository";
-import { getCurrentUserId } from "@/lib/current-user";
+import { requireUserId } from "@/lib/require-user";
 
 const ACCEPTED_EXTENSIONS = [".pdf", ".doc", ".docx"];
 
 export async function POST(request: Request) {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   const formData = await request.formData();
   const file = formData.get("file");
 
@@ -29,7 +30,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE() {
-  const userId = getCurrentUserId();
+  const userId = await requireUserId();
+  if (userId instanceof NextResponse) return userId;
   const profile = await repository.removeResume(userId);
   return NextResponse.json(profile);
 }

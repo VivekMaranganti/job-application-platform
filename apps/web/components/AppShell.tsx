@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ProfileTab } from "@/components/tabs/ProfileTab";
 import { FiltersTab } from "@/components/tabs/FiltersTab";
 import { RequiredInfoTab } from "@/components/tabs/RequiredInfoTab";
@@ -15,21 +16,39 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "jobs", label: "Job feed" },
 ];
 
-export function AppShell() {
+export function AppShell({ userEmail }: { userEmail: string }) {
   const [tab, setTab] = useState<TabId>("profile");
+  const router = useRouter();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <div className="min-h-screen bg-paper [background-image:radial-gradient(circle_at_1px_1px,rgba(27,30,35,0.035)_1px,transparent_0)] [background-size:22px_22px]">
       <div className="max-w-[720px] mx-auto px-5 py-10 pb-20">
-        <div className="mb-7">
-          <div className="font-mono text-[11px] tracking-widest uppercase text-bronze mb-1.5">
-            Case File — Applicant Profile
+        <div className="mb-7 flex items-start justify-between gap-4">
+          <div>
+            <div className="font-mono text-[11px] tracking-widest uppercase text-bronze mb-1.5">
+              Case File — Applicant Profile
+            </div>
+            <h1 className="font-semibold text-[32px] text-ink m-0 tracking-tight">Your application dossier</h1>
+            <p className="text-[14.5px] text-muted mt-2 leading-relaxed">
+              Everything here stays private to your account. It&apos;s the information the search and apply agent
+              will draw on.
+            </p>
           </div>
-          <h1 className="font-semibold text-[32px] text-ink m-0 tracking-tight">Your application dossier</h1>
-          <p className="text-[14.5px] text-muted mt-2 leading-relaxed">
-            Everything here stays private to you (single-user for now — see issue #3). It&apos;s the information the
-            search and apply agent will draw on.
-          </p>
+          <div className="flex flex-col items-end gap-1.5 pt-1 shrink-0">
+            <span className="font-mono text-[12px] text-muted">{userEmail}</span>
+            <button
+              onClick={handleLogout}
+              className="font-mono text-[12px] text-bronze underline cursor-pointer"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-1 relative z-10">
