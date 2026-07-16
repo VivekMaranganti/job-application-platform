@@ -1,8 +1,10 @@
 import type {
   Application,
+  ApplicationLogEntry,
   ApplicationStatus,
   Filters,
   JobListing,
+  LogEntrySource,
   Profile,
   RequiredInfoAnswer,
   RequiredFieldId,
@@ -73,4 +75,30 @@ export interface Repository {
   ): Promise<Application>;
   /** Used by "Skip -> Undo" / "cancel review" to return a job to the unactioned state. */
   deleteApplication(userId: string, jobListingId: string): Promise<void>;
+
+  // --- Activity log (ApplicationLogEntry, issue #6) -----------------------
+  // PRIVACY-CRITICAL: see lib/types.ts ApplicationLogEntry doc comment.
+  // `value_category` must always be a coarse label, never a raw field value.
+  /**
+   * Lists a user's log entries, optionally scoped to one Application.
+   * Always filtered by `userId` — an `applicationId` belonging to a
+   * different user must never leak rows (enforced by the implementation,
+   * not just by callers passing the right id).
+   */
+  listApplicationLogEntries(userId: string, applicationId?: string): Promise<ApplicationLogEntry[]>;
+  /**
+   * Records that a field (or the resume) was submitted on the user's
+   * behalf. Implementations must verify `applicationId` actually belongs to
+   * `userId` before writing — never trust the caller alone for that scoping.
+   */
+  createApplicationLogEntry(
+    userId: string,
+    entry: {
+      application_id: string;
+      field_label: string;
+      value_category: string;
+      sent_to: string;
+      source: LogEntrySource;
+    }
+  ): Promise<ApplicationLogEntry>;
 }

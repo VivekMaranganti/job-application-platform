@@ -4,6 +4,7 @@ import {
   CompanySize as PrismaCompanySize,
   DatePosted as PrismaDatePosted,
   EmploymentType as PrismaEmploymentType,
+  LogEntrySource as PrismaLogEntrySource,
   ProfileLevel,
   WorkArrangement as PrismaWorkArrangement,
 } from "auto-job-applier-db";
@@ -13,6 +14,7 @@ import type {
   DatePosted,
   EmploymentType,
   Level,
+  LogEntrySource,
   RequiredFieldMode,
   WorkArrangement,
 } from "@/lib/types";
@@ -99,6 +101,12 @@ const APPLICATION_STATUS_TO_PRISMA: Record<ApplicationStatus, PrismaApplicationS
 };
 const PRISMA_TO_APPLICATION_STATUS = invert(APPLICATION_STATUS_TO_PRISMA);
 
+const LOG_ENTRY_SOURCE_TO_PRISMA: Record<LogEntrySource, PrismaLogEntrySource> = {
+  auto: PrismaLogEntrySource.AUTO,
+  "user-provided-live": PrismaLogEntrySource.USER_PROVIDED_LIVE,
+};
+const PRISMA_TO_LOG_ENTRY_SOURCE = invert(LOG_ENTRY_SOURCE_TO_PRISMA);
+
 export const toPrismaLevel = (v: Level): ProfileLevel => LEVEL_TO_PRISMA[v];
 export const fromPrismaLevel = (v: ProfileLevel): Level => PRISMA_TO_LEVEL[v];
 
@@ -125,3 +133,8 @@ export const toPrismaApplicationStatus = (v: ApplicationStatus): PrismaApplicati
   APPLICATION_STATUS_TO_PRISMA[v];
 export const fromPrismaApplicationStatus = (v: PrismaApplicationStatus): ApplicationStatus =>
   PRISMA_TO_APPLICATION_STATUS[v];
+
+export const toPrismaLogEntrySource = (v: LogEntrySource): PrismaLogEntrySource =>
+  LOG_ENTRY_SOURCE_TO_PRISMA[v];
+export const fromPrismaLogEntrySource = (v: PrismaLogEntrySource): LogEntrySource =>
+  PRISMA_TO_LOG_ENTRY_SOURCE[v];

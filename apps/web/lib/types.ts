@@ -162,6 +162,31 @@ export interface Application {
 }
 
 // ---------------------------------------------------------------------------
+// Activity log (issue #6)
+//
+// Audit trail of what was submitted on a user's behalf during form-filling.
+// Mirrors packages/db's ApplicationLogEntry model exactly on purpose:
+// `value_category` is a coarse label (e.g. "work_auth", "resume") — NEVER
+// the raw value that was typed/selected/uploaded. There is intentionally no
+// field here that could hold a raw answer; callers must not repurpose
+// `value_category` (or any other field) to carry one. See
+// packages/db/prisma/schema.prisma's ApplicationLogEntry doc comment and
+// packages/db/README.md "Encryption at rest" for the full rationale.
+// ---------------------------------------------------------------------------
+export type LogEntrySource = "auto" | "user-provided-live";
+
+export interface ApplicationLogEntry {
+  id: string;
+  application_id: string;
+  user_id: string;
+  timestamp: string;
+  field_label: string;
+  value_category: string;
+  sent_to: string;
+  source: LogEntrySource;
+}
+
+// ---------------------------------------------------------------------------
 // Standard EEO / voluntary-disclosure fields (shared, not per-user)
 // ---------------------------------------------------------------------------
 const RACE_OPTIONS = [
