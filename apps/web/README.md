@@ -1,5 +1,28 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Database setup (required before `npm run dev`)
+
+The app is backed by Postgres via `packages/db` (`lib/repository/postgres.ts`) --
+there is no in-memory fallback wired up anymore. Before running the app:
+
+1. Follow `packages/db/README.md` to get a reachable Postgres instance and
+   apply migrations (`npm run db:migrate:deploy --workspace=auto-job-applier-db`).
+2. Copy `packages/db/.env.example` to `packages/db/.env` and fill in
+   `DATABASE_URL` / `FIELD_ENCRYPTION_KEY` -- both are read by this app too
+   (Prisma reads `DATABASE_URL` from the process env wherever the client
+   runs; `packages/db/lib/encryption.ts`'s `EnvKeyProvider` reads
+   `FIELD_ENCRYPTION_KEY` the same way). The simplest way to get both into
+   this app's `next dev` process is to also place a `.env` at
+   `apps/web/.env` with the same two variables.
+3. There is no auth yet (issue #3) -- every request resolves to a single
+   fixed dev user id (`lib/current-user.ts`), which the Postgres repository
+   lazily upserts a `users` row for on first write.
+4. Resume file bytes are stored via `ResumeStorage` (`packages/db/lib/resume-storage.ts`),
+   not in Postgres. The dev default (`LocalDiskResumeStorage`) writes under
+   `packages/db/.data/resumes` (gitignored) -- fine for local dev, **not**
+   for production (see that file's doc comment for what a real S3-backed
+   implementation needs to satisfy).
+
 ## Getting Started
 
 First, run the development server:

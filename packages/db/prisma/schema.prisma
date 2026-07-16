@@ -132,6 +132,13 @@ model Profile {
   // store the plaintext URL in a separate column.
   resumeFileUrlEncrypted Bytes?    @map("resume_file_url_encrypted")
   resumeUploadedAt       DateTime? @map("resume_uploaded_at")
+  // Not sensitive (unlike the object reference above) -- plain columns so
+  // the UI can render the uploaded file's name/size without decrypting or
+  // fetching the file itself. Added when wiring the Postgres-backed
+  // Repository; see apps/web/lib/types.ts Profile for the domain shape.
+  resumeFileName         String?   @map("resume_file_name")
+  resumeFileSize         Int?      @map("resume_file_size")
+  resumeMimeType         String?   @map("resume_mime_type")
 
   locations    String[]       @default([])
   levels       ProfileLevel[] @default([])

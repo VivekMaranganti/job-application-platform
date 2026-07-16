@@ -6,3 +6,7 @@ generated/
 prisma/generated/
 *.tsbuildinfo
 
+
+# Dev-only local resume storage (LocalDiskResumeStorage) -- never commit
+# actual resume files.
+.data/

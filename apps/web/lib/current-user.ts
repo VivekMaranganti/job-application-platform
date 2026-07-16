@@ -10,7 +10,11 @@
 // `getCurrentUserId(request)` instead of a hardcoded value.
 // ---------------------------------------------------------------------------
 
-export const MOCK_USER_ID = "user_dev_1";
+// A fixed UUID, not a human-readable slug: `users.id` is `@db.Uuid` in the
+// Postgres schema (issue #2), so this constant has to be a valid UUID for
+// the Postgres-backed Repository (postgres.ts) to use it directly as a
+// primary key / foreign key value.
+export const MOCK_USER_ID = "00000000-0000-0000-0000-000000000001";
 
 /** Placeholder for a future request-scoped lookup. Currently always returns the mock user. */
 export function getCurrentUserId(): string {
