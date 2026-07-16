@@ -1,0 +1,10 @@
+handoff-file.txt
+
+# Node / Prisma
+node_modules/
+.env
+.env.*.local
+generated/
+prisma/generated/
+*.tsbuildinfo
+
