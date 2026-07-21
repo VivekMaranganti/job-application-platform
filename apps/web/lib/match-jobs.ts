@@ -146,14 +146,27 @@ export function matchJobs(jobs: JobListing[], input: MatchInput): MatchResult {
       }
     }
 
-    // Employment type. Same neutral-on-null treatment as work arrangement
-    // above, same deliberate tradeoff: an Internship/Contract/Part-time-only
-    // filter will also surface unlabeled postings that are probably
-    // ordinary full-time roles, in exchange for never hiding a posting the
-    // connector just didn't tag.
+    // Employment type. Unlike work_arrangement (where a bare office address
+    // is genuinely ambiguous between onsite/hybrid), a null employment_type
+    // here just means the title had no "intern"/"contract"/"part-time"
+    // keyword -- which in practice means the role is ordinary full-time.
+    // Employers reliably say "Intern"/"Internship" in the title when a role
+    // actually is one; they essentially never leave it ambiguous. So
+    // treating null as neutral-pass-through for an Internship/Contract/
+    // Part-time-only filter was actively wrong in practice: it let the
+    // (large) pool of unlabeled full-time postings flood the results any
+    // time a user filtered for Internship, defeating the filter. Null now
+    // only counts toward "no constraint from this filter" when the user's
+    // selection includes Full-time -- for Internship/Contract/Part-time
+    // selections, an unlabeled posting is treated as (assumed) full-time
+    // and excluded, same as if it were labeled full-time explicitly.
     if (filters.employment_type.length > 0) {
       if (job.employment_type == null) {
-        reasonsFor.push("Employment type not listed by this posting (filter not applied)");
+        if (filters.employment_type.includes("Full-time")) {
+          reasonsFor.push("Employment type not listed by this posting (assumed full-time)");
+        } else {
+          reasonsAgainst.push("Employment type not listed (assumed full-time, not one of your selected types)");
+        }
       } else if (filters.employment_type.includes(job.employment_type)) {
         reasonsFor.push(`Type: ${job.employment_type}`);
       } else {
