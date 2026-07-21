@@ -1,0 +1,68 @@
+JOB APPLICATION ASSISTANT (auto-job-applier) - PROJECT STATUS
+Written 2026-07-16
+
+WHAT THIS PROJECT IS
+
+A web app that helps a user find and apply to jobs with an AI agent doing the form-filling, under the user's supervision. Six core pieces, per the original handoff doc: Profile, Filters, Required Information, Job Feed, Apply Agent (live browser automation), and Activity Log. Eventually meant to be multi-user, though early usage is single-user.
+
+CURRENT STATE
+
+All six core pieces from the original handoff have at least a first implementation, and everything is merged into the main branch on GitHub (commit f2a18c9 as of this writing, 29 commits total, no open PRs or open issues).
+
+Next.js app scaffold (apps/web) exists with API routes for profile, filters, required-info, jobs, applications, and activity-log, plus auth. This rebuilds the original single-file React prototype (job-application-profile.jsx, still in the repo root as a reference) against a real backend.
+
+Database: Postgres schema defined via Prisma in packages/db, with a Postgres-backed repository actually wired into the API routes (not just scaffolded).
+
+Auth: email magic-link strategy is implemented.
+
+Job discovery: a Greenhouse connector exists (packages/db/connectors/greenhouse) - the first and, per the handoff, recommended-first ATS connector. Lever, Ashby, and Workday connectors do not exist yet. LinkedIn/Indeed-style aggregator scraping was explicitly deferred pending legal review and is still not built.
+
+Apply agent (apps/apply-agent-service): this was the hardest, most novel piece per the handoff, and it exists as a separate service with browser orchestration, a screencast/control WebSocket, a session manager, an automation loop, DOM extraction, field-matching (deterministic keyword rules plus an LLM fallback for unrecognized fields), field actions, and turn-taking logic (agent yields control on CAPTCHAs, manual-mode fields, and low-confidence matches; never auto-submits; requires human review before final submit).
+
+Activity Log: implemented, logs field categories and sources rather than raw sensitive values, per the original privacy requirement.
+
+Legal/safety guardrail (criminal_history / ban-the-box): a policy scaffold exists (packages/db/lib/policy/criminal-history-jurisdiction.ts) that defaults every jurisdiction to "not allowed" until a real lawyer signs off jurisdiction-by-jurisdiction, and unconditionally forces this field to manual-entry at save time. As of my last session, I also wired the apply-agent's field-matcher to call this same gate as defense-in-depth before ever treating criminal_history as auto-fillable, which had been documented as required but was not actually connected. Both gates now agree: this field cannot be auto-filled anywhere in the product today, for any jurisdiction, until a lawyer clears specific jurisdictions and a human approves a PR adding them one at a time.
+
+Housekeeping done in my last session: removed four stale/merged Claude Code agent worktrees and two OS-generated duplicate files that had accumulated locally, and fixed a corrupted local lucide-react install that was breaking the web app's typecheck. None of this affects the app's actual behavior.
+
+KNOWN GAPS AND LIMITATIONS
+
+No automated tests exist anywhere in the repository - no unit tests, no integration tests, nothing under apps/web, apps/apply-agent-service, or packages/db. Everything that has been verified so far was verified by manual typecheck/lint/read-through, not by a test suite.
+
+The Prisma client could not be code-generated in my working environment because the sandbox's network policy blocks binaries.prisma.sh (the engine binary host). This means I could not fully verify the database layer compiles end-to-end from a completely clean environment - I confirmed the surrounding application code typechecks cleanly, but the generated Prisma client itself was untested by me. This should work fine on a normal developer machine or CI runner with unrestricted network access; it's a limitation of my sandbox, not a known bug.
+
+Several GitHub branches (agent/activity-log-security, agent/apply-agent-service, agent/ats-greenhouse, agent/auth-strategy, agent/criminal-history-jurisdiction-gate, agent/postgres-repository-wiring, agent/postgres-schema, vivek/persistence-layer) are already merged into main but still exist on GitHub. Harmless, just clutter - can be bulk-deleted from the GitHub Branches page.
+
+The apply agent's field-matcher has "no data source yet" gaps by design for several common form fields (full name, phone, email, LinkedIn/portfolio URLs, work history, education, cover letters) - it correctly yields to the human for these today rather than guessing, but the Profile data model doesn't currently capture enough to fill them automatically. This was called out as acceptable for the current build stage, not a bug.
+
+The apply agent's termination logic runs a fixed small number of extract-decide-fill passes (3) rather than a fully general "wait until the form stops changing" approach - documented as sufficient for the current foundation but not production-grade for complex multi-step or dynamically-revealed forms.
+
+OPEN DECISIONS NOT YET MADE (carried over from the original handoff, still open)
+
+Hosting for the browser-orchestration piece: self-hosted Playwright-in-containers versus a managed browser-automation provider. This affects cost, ops complexity, and session-security guarantees and has not been decided.
+
+Which LLM powers the in-session apply agent's field-classification decisions in production, and whether it's the same model/account used for resume analysis - not finalized.
+
+Whether criminal_history auto-mode ships at all in v1, or stays permanently manual pending per-jurisdiction legal clearance - not decided; currently defaults to "never," which is the safe default but may or may not be the final product decision.
+
+NEXT STEPS TO GET TO A COMPLETE, SHIPPABLE PRODUCT
+
+1. Add an automated test suite. This is the single biggest gap right now. At minimum: unit tests for the field-matcher's decision logic (especially the required-info and criminal_history gating, since that's the most legally sensitive code path), unit tests for the encryption/decryption helpers in packages/db, and integration tests for the API routes in apps/web. Without tests, every future change risks silently breaking the privacy and legal guardrails that were carefully built in.
+
+2. Verify the full stack builds and runs end-to-end on a real machine with unrestricted network access (to actually generate the Prisma client) and a real Postgres instance - run migrations, seed Greenhouse data, start apps/web and apps/apply-agent-service together, and manually walk through one full apply flow (profile -> filters -> required info -> job feed -> apply session -> review -> submit) to confirm the pieces actually talk to each other correctly, not just that each typechecks in isolation.
+
+3. Get an actual legal review of ban-the-box / fair-chance-hiring law for at least one target jurisdiction if auto-mode for criminal_history is wanted at all in v1. Until then, this field stays manual everywhere, which is safe but may be a UX friction point worth deciding on deliberately rather than by default.
+
+4. Decide and implement the browser-orchestration hosting approach (self-hosted containers vs. managed provider) - this is a real infrastructure decision that affects cost and security posture and blocks a production deploy of the apply agent.
+
+5. Build out the Profile data model and matching logic needed to close the "no data source yet" gaps in the apply agent (name, phone, email, LinkedIn/portfolio, work history, education, cover letters) so fewer applications require manual intervention for basic contact fields.
+
+6. Add Lever, Ashby, and/or Workday connectors to widen job discovery beyond Greenhouse, per the handoff's suggested build order.
+
+7. Before touching LinkedIn/Indeed-style aggregators at all: get a legal review specific to those platforms' terms of service and automated-access enforcement history. This was explicitly flagged as higher legal risk and should not be built casually.
+
+8. Production hardening pass: encryption-at-rest verification for resume files and sensitive RequiredInfoAnswer values end-to-end (not just that the code path exists, but that it's actually configured correctly in a real deployment), session security review for the apply agent's live video/control channel, and a decision on whether internal support tooling should ever have plaintext access to the Activity Log (the handoff flagged this as worth considering, not yet decided).
+
+9. Clean up the stale merged branches on GitHub (cosmetic, low priority).
+
+10. Decide on and implement real production auth hardening beyond the current magic-link scaffold if this is going to support real multiple users (rate limiting, session expiry policy, etc. - not detailed in what exists today).
