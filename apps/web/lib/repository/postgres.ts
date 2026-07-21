@@ -78,6 +78,24 @@ function fromPrismaBytes(bytes: Uint8Array | null | undefined): Buffer | null {
   return bytes ? Buffer.from(bytes) : null;
 }
 
+/**
+ * Makes a user-supplied filename safe to use as a path segment in a resume's
+ * objectKey (see saveResume below). objectKey is later joined onto a root
+ * directory in packages/db/lib/resume-storage.ts's `pathFor` with no other
+ * validation, so this is the only thing standing between an uploaded
+ * filename like `../../etc/passwd` and a path-traversal write outside the
+ * resume storage directory -- strip anything that isn't alphanumeric, a
+ * dot, a dash, an underscore, or a space, collapse the rest to underscores,
+ * and cap the length so an absurdly long filename can't blow past
+ * filesystem limits.
+ */
+function sanitizeResumeFileName(fileName: string): string {
+  const base = fileName.split(/[/\\]/).pop() || "resume";
+  const cleaned = base.replace(/[^a-zA-Z0-9._ -]/g, "_").trim();
+  const safe = cleaned.length > 0 ? cleaned : "resume";
+  return safe.slice(0, 150);
+}
+
 function emptyProfile(userId: string): Profile {
   return {
     user_id: userId,
@@ -180,7 +198,18 @@ export const postgresRepository: Repository = {
   },
 
   async saveResume(userId, file) {
-    const objectKey = `resumes/${userId}/${randomUUID()}`;
+    // Keep the original filename (sanitized) in the object key, not just a
+    // bare UUID -- found live: uploading via a browser-automation tool
+    // (Claude in Chrome's file_upload) to a third-party application form
+    // sends the *filename on disk*, and a raw UUID with no extension shows
+    // up as a nonsense, extension-less attachment name on the employer's
+    // side even though resumeFileName is stored correctly in Postgres. The
+    // UUID prefix still guarantees uniqueness (a user re-uploading a resume
+    // with the same original filename shouldn't collide with their own
+    // prior upload); sanitization keeps this safe to use directly as a
+    // path segment (see resume-storage.ts's pathFor -- objectKey must never
+    // contain a path separator).
+    const objectKey = `resumes/${userId}/${randomUUID()}-${sanitizeResumeFileName(file.fileName)}`;
     await resumeStorage.put(objectKey, { buffer: file.buffer });
     const encryptedUrl = toPrismaBytes(await encryptField(`${RESUME_URL_PREFIX}${objectKey}`));
 
