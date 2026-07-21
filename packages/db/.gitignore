@@ -19,3 +19,11 @@ connectors/greenhouse/boards.json
 # Lever connector site config -- same convention. See
 # connectors/lever/sites.example.json for the format.
 connectors/lever/sites.json
+
+# Ashby connector job-board config -- same convention. See
+# connectors/ashby/job-boards.example.json for the format.
+connectors/ashby/job-boards.json
+
+# SmartRecruiters connector company config -- same convention. See
+# connectors/smartrecruiters/companies.example.json for the format.
+connectors/smartrecruiters/companies.json
