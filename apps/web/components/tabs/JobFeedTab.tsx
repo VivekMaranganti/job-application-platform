@@ -13,6 +13,10 @@ import { SectionCard, ghostButtonClass, inlineLinkClass, primaryButtonClass } fr
 
 const metaClass = "inline-flex items-center gap-1 text-[12.5px] text-muted";
 
+function buildApplyPrompt(job: { title: string; company: string }) {
+  return `Apply to ${job.title} at ${job.company} for me.`;
+}
+
 export function JobFeedTab() {
   const { profile, loading: profileLoading } = useProfile();
   const { filters, loading: filtersLoading } = useFilters();
@@ -117,7 +121,16 @@ export function JobFeedTab() {
 
             {status === "idle" && (
               <div className="flex gap-2 mt-3.5">
-                <button onClick={() => setStatus(job.id, "reviewing")} className={primaryButtonClass}>
+                <button
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(buildApplyPrompt(job)).catch(() => {
+                      // Clipboard write can fail (permissions, non-secure context) — not fatal,
+                      // the reviewing panel below still shows the prompt to copy manually.
+                    });
+                    setStatus(job.id, "reviewing");
+                  }}
+                  className={primaryButtonClass}
+                >
                   Apply
                 </button>
                 <button onClick={() => setStatus(job.id, "skipped")} className={ghostButtonClass}>
@@ -144,10 +157,10 @@ export function JobFeedTab() {
                   <li>You&apos;ll be prompted live for: {manualFields.map((f) => f.label).join(", ") || "nothing — all fields are automatic"}</li>
                 </ul>
                 <div className="text-xs text-ledger bg-ledger/[0.06] border border-ledger/20 rounded px-2.5 py-1.5 my-2.5 leading-relaxed">
-                  Ready to apply — ask Claude, e.g. &ldquo;Apply to {job.title} at {job.company} for me.&rdquo; Claude
-                  opens the application via Claude in Chrome, fills what it can from your saved info, and checks with
-                  you before submitting anything. This app records the real result (status and activity log) once
-                  that session finishes — refresh below to see it.
+                  Ready to apply — the prompt &ldquo;{buildApplyPrompt(job)}&rdquo; was copied to your clipboard, so
+                  just paste it into a Claude chat. Claude opens the application via Claude in Chrome, fills what it
+                  can from your saved info, and checks with you before submitting anything. This app records the
+                  real result (status and activity log) once that session finishes — refresh below to see it.
                 </div>
                 <div className="flex gap-2">
                   <button onClick={() => refreshApplications()} className={ghostButtonClass}>
