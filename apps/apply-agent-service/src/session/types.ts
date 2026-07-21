@@ -37,9 +37,34 @@ export interface SessionControl {
   recordAutoFill(field: FieldRef, category: FieldValueCategory, confidence: number): Promise<void>;
   /** Records that a human-supplied (live) value was used: logs + broadcasts `agent_action`. */
   recordHumanFill(field: FieldRef, category: FieldValueCategory): Promise<void>;
+  /**
+   * Records that the agent got past a registration wall, by creating an
+   * account or by signing in with one already in the vault.
+   *
+   * Takes no value parameter, by design. There is no argument to this method
+   * that a password could be passed as, so no call site can accidentally
+   * route one into the event stream or the ApplicationLogEntry table -- the
+   * same shape of guarantee as `SessionControl` having no submit method.
+   * What gets logged is the category `account_credentials` and the action;
+   * the password only ever exists in the vault.
+   */
+  recordAccountAction(
+    action: "created_account" | "signed_in",
+    hostname: string,
+    username: string,
+  ): Promise<void>;
   /** Broadcasts `yield_control` and blocks until the human resolves it. */
   yieldControl(
-    reason: "manual_field" | "low_confidence" | "captcha" | "unrecognized_field" | "jurisdiction_not_cleared" | "error",
+    reason:
+      | "manual_field"
+      | "low_confidence"
+      | "captcha"
+      | "unrecognized_field"
+      | "jurisdiction_not_cleared"
+      | "account_creation_not_allowed"
+      | "account_form_needs_input"
+      | "account_creation_failed"
+      | "error",
     field: FieldRef | undefined,
     category: FieldValueCategory | undefined,
     message: string,

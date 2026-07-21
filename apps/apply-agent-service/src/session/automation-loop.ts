@@ -3,6 +3,7 @@ import type { SessionControl } from "./types";
 import type { ApplicationContext } from "../db/context";
 import type { ReviewSummaryItem, FieldValueCategory } from "../protocol/events";
 import { extractFormFields, detectCaptcha } from "../browser/dom-extraction";
+import { provisionAccountIfNeeded } from "./account-provisioner";
 import { matchFields, type FieldDecision } from "../agent/field-matcher";
 import { applyFieldValue, uploadFile } from "../browser/field-actions";
 import { getResumeFileForUpload } from "../agent/resume-content";
@@ -20,6 +21,18 @@ import { getResumeFileForUpload } from "../agent/resume-content";
 // ---------------------------------------------------------------------------
 
 const MAX_PASSES = 3;
+
+/**
+ * Extra passes granted when an auth wall is cleared.
+ *
+ * Registration burns a pass without filling any application field -- the
+ * page after signup is where the real form finally appears. Without this,
+ * a Workday application that needs an account could spend its whole pass
+ * budget on the signup flow and reach `ready_for_review` having filled
+ * nothing. The budget is extended rather than made unbounded so a redirect
+ * loop between two auth pages still terminates.
+ */
+const MAX_AUTH_WALL_PASSES = 2;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -42,6 +55,7 @@ export async function runAutomationLoop(
   const summaryBySelector = new Map<string, ReviewSummaryItem>();
   let needsAnotherPass = true;
   let pass = 0;
+  let authWallPassesUsed = 0;
 
   while (needsAnotherPass && pass < MAX_PASSES) {
     pass += 1;
@@ -60,6 +74,39 @@ export async function runAutomationLoop(
       // the CAPTCHA state without re-checking.
       void resolution;
       pass -= 1;
+      continue;
+    }
+
+    // Auth wall check comes before field extraction, and before the
+    // field-matcher sees anything. A signup form's inputs would otherwise be
+    // handed to `matchFields` as if they were application questions -- at
+    // best producing nonsense matches for "Email"/"Password", at worst
+    // routing a match decision at a password field. The matcher never gets
+    // the chance: on an auth wall this branch either clears it and re-runs
+    // the pass, or yields.
+    const provisioned = await provisionAccountIfNeeded(control, page, context);
+
+    if (provisioned.kind !== "not_an_auth_wall") {
+      if (authWallPassesUsed >= MAX_AUTH_WALL_PASSES) {
+        await control.yieldControl(
+          "account_creation_failed",
+          undefined,
+          "account_credentials",
+          "This application keeps returning to a sign-in or registration page. " +
+            "Something about the account flow isn't working -- take a look directly.",
+        );
+        break;
+      }
+      authWallPassesUsed += 1;
+
+      // Signing in or registering navigates to a different page, so nothing
+      // extracted before this point is still valid. Re-run the pass against
+      // whatever is now on screen rather than falling through to extraction.
+      // `pass` is decremented so clearing an auth wall doesn't consume part
+      // of the form-filling budget -- MAX_AUTH_WALL_PASSES bounds this
+      // branch independently.
+      pass -= 1;
+      needsAnotherPass = true;
       continue;
     }
 

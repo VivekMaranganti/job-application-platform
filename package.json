@@ -11,8 +11,11 @@
     "dev": "npm run dev --workspace=web",
     "build": "npm run build --workspace=web",
     "lint": "npm run lint --workspace=web",
+    "test": "npm run test --workspace=auto-job-applier-db && npm run test --workspace=apply-agent-service",
     "db:seed:greenhouse": "npm run db:seed:greenhouse --workspace=auto-job-applier-db",
-    "db:seed:lever": "npm run db:seed:lever --workspace=auto-job-applier-db"
+    "db:seed:lever": "npm run db:seed:lever --workspace=auto-job-applier-db",
+    "db:seed:ashby": "npm run db:seed:ashby --workspace=auto-job-applier-db",
+    "db:seed:smartrecruiters": "npm run db:seed:smartrecruiters --workspace=auto-job-applier-db"
   },
   "allowScripts": {
     "esbuild@0.28.1": true,

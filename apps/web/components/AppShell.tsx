@@ -6,14 +6,16 @@ import { ProfileTab } from "@/components/tabs/ProfileTab";
 import { FiltersTab } from "@/components/tabs/FiltersTab";
 import { RequiredInfoTab } from "@/components/tabs/RequiredInfoTab";
 import { JobFeedTab } from "@/components/tabs/JobFeedTab";
+import { CredentialsTab } from "@/components/tabs/CredentialsTab";
 
-type TabId = "profile" | "filters" | "required" | "jobs";
+type TabId = "profile" | "filters" | "required" | "jobs" | "accounts";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "profile", label: "Profile" },
   { id: "filters", label: "Filters" },
   { id: "required", label: "Required information" },
   { id: "jobs", label: "Job feed" },
+  { id: "accounts", label: "Accounts" },
 ];
 
 export function AppShell({ userEmail }: { userEmail: string }) {
@@ -74,6 +76,7 @@ export function AppShell({ userEmail }: { userEmail: string }) {
           {tab === "filters" && <FiltersTab />}
           {tab === "required" && <RequiredInfoTab />}
           {tab === "jobs" && <JobFeedTab />}
+          {tab === "accounts" && <CredentialsTab />}
         </div>
       </div>
     </div>

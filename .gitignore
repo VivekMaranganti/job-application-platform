@@ -42,5 +42,11 @@ next-env.d.ts
 
 # repo-specific
 handoff-file.txt
+
+# Personal application reference doc -- contains real contact details (phone,
+# home city) that the apply agent reads locally. Same treatment as
+# handoff-file.txt: a working document, not source, and specifically not
+# something to publish to a GitHub remote.
+Vivek_Maranganti_Application_Profile.md
 .claude/settings.local.json
 node_modules/

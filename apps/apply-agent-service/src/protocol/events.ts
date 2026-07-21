@@ -44,6 +44,14 @@ export type FieldValueCategory =
   | "portfolio_url"
   | "work_history"
   | "education"
+  /**
+   * An ATS account credential the agent created or reused to get past a
+   * registration wall. Like every other category here this is a *label*, not
+   * a value -- db/log-writer.ts writes the category and the schema has no
+   * column capable of holding the password. The password itself lives only
+   * in `portal_credentials.password_encrypted` (see packages/db/CREDENTIALS.md).
+   */
+  | "account_credentials"
   | "other";
 
 export interface FieldRef {
@@ -73,7 +81,16 @@ export type AgentEvent =
       timestamp: string;
       field: FieldRef;
       valueCategory: FieldValueCategory;
-      action: "filled" | "selected" | "clicked" | "navigated" | "uploaded_resume";
+      action:
+        | "filled"
+        | "selected"
+        | "clicked"
+        | "navigated"
+        | "uploaded_resume"
+        /** Registered a new account on an allowlisted ATS to get past a registration wall. */
+        | "created_account"
+        /** Signed in using a credential already in the vault for this ATS. */
+        | "signed_in";
       confidence: number;
     }
   /**
@@ -87,7 +104,28 @@ export type AgentEvent =
       type: "yield_control";
       sessionId: string;
       timestamp: string;
-      reason: "manual_field" | "low_confidence" | "captcha" | "unrecognized_field" | "jurisdiction_not_cleared" | "error";
+      reason:
+        | "manual_field"
+        | "low_confidence"
+        | "captcha"
+        | "unrecognized_field"
+        | "jurisdiction_not_cleared"
+        /**
+         * The page is a registration wall on a domain that is NOT on the
+         * ATS allowlist, so the agent will not create an account or type a
+         * stored password into it. The human can register manually if they
+         * trust the site. See packages/db/lib/policy/account-creation-allowlist.ts.
+         */
+        | "account_creation_not_allowed"
+        /**
+         * The site IS allowlisted, but its signup form asks for something
+         * beyond username/password that the agent won't invent (security
+         * questions, "how did you hear about us", a country dropdown).
+         */
+        | "account_form_needs_input"
+        /** Registration was attempted on an allowlisted site and did not succeed. */
+        | "account_creation_failed"
+        | "error";
       field?: FieldRef;
       valueCategory?: FieldValueCategory;
       message: string;

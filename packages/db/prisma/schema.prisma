@@ -118,6 +118,9 @@ model User {
   applicationLogEntries ApplicationLogEntry[]
   loginTokens           LoginToken[]
   sessions              Session[]
+  portalCredentials     PortalCredential[]
+  revealChallenges      RevealChallenge[]
+  credentialRevealLog   CredentialRevealEvent[]
 
   @@map("users")
 }
@@ -342,4 +345,136 @@ model ApplicationLogEntry {
   @@index([userId])
   @@index([applicationId])
   @@map("application_log_entries")
+}
+
+// ===========================================================================
+// Portal credentials (ATS account vault)
+//
+// The apply agent sometimes cannot proceed without an account on the
+// employer's ATS (Workday and iCIMS in particular gate the application form
+// behind registration). These tables are where those account credentials
+// live.
+//
+// SENSITIVE, and handled the same way as every other sensitive column in
+// this schema: `passwordEncrypted` is `Bytes` holding AES-256-GCM ciphertext
+// produced by lib/encryption.ts. Postgres never sees the plaintext and never
+// holds a key. See packages/db/CREDENTIALS.md for the full design.
+//
+// Note the deliberate asymmetry with LoginToken/Session above: those store a
+// SHA-256 *hash* because nothing ever needs the original value back -- they
+// only ever need to answer "does this incoming token match?". Portal
+// passwords are the opposite: the agent must reproduce the exact plaintext
+// to type into a login form, and the user must be able to read it to sign in
+// manually. That forces reversible encryption rather than hashing, which is
+// strictly weaker, and is why the key-management and reveal-audit machinery
+// around these two tables is heavier than anything guarding the token tables.
+// ===========================================================================
+
+/// One saved account on one ATS domain.
+///
+/// `domain` is the *registrable* domain (eTLD+1, e.g. "myworkdayjobs.com"),
+/// normalized and allowlist-checked by lib/policy/account-creation-allowlist.ts
+/// before any row is ever written. Storing the registrable domain rather than
+/// the full hostname is what makes one saved credential reusable across the
+/// per-tenant subdomains those ATSs hand out (acme.myworkdayjobs.com,
+/// globex.myworkdayjobs.com, ...), which is how these accounts actually work.
+model PortalCredential {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  /// Registrable domain (eTLD+1), lowercased. See allowlist module.
+  domain String
+  /// Human-facing label for the UI, e.g. "Workday". Never used for matching.
+  siteName String @map("site_name")
+  /// The hostname the account was actually created on, kept for the audit
+  /// trail. Matching uses `domain`; this records where it came from.
+  originHostname String @map("origin_hostname")
+
+  /// Not encrypted: usernames are almost always the user's own email, which
+  /// is already stored in plaintext on `users.email`. Encrypting it here
+  /// would imply a confidentiality guarantee the rest of the schema doesn't
+  /// make, at the cost of making the list view undecryptable-by-design.
+  username String
+
+  /// Ciphertext (AES-256-GCM, app-level) of the account password. There is
+  /// intentionally NO plaintext password column -- do not add one.
+  passwordEncrypted Bytes @map("password_encrypted")
+
+  /// True when the agent generated this account itself, false when the user
+  /// saved credentials for an account they already had. Surfaced in the UI
+  /// because "did a robot make this?" is a question users reasonably ask.
+  createdByAgent Boolean @default(true) @map("created_by_agent")
+
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  lastRevealedAt DateTime? @map("last_revealed_at")
+
+  user       User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  revealLog  CredentialRevealEvent[]
+
+  // One account per (user, domain, username). A user may legitimately hold
+  // two accounts on the same ATS under different emails, so username is part
+  // of the key rather than (user, domain) alone.
+  @@unique([userId, domain, username])
+  @@index([userId])
+  @@map("portal_credentials")
+}
+
+/// A short-lived, single-use code proving the human is still present before
+/// any password is decrypted and returned.
+///
+/// This exists because the app's primary auth is a 30-day magic-link session
+/// cookie (see apps/web/AUTH.md). A 30-day cookie is a reasonable bar for
+/// "show me my job feed" and a poor one for "show me every password I own":
+/// an unattended laptop is enough. There is no account password to re-prompt
+/// for under magic-link auth, so re-authentication here means re-proving
+/// control of the email address -- a fresh code, emailed, good for 10
+/// minutes, unlocking a 5-minute reveal window.
+///
+/// SENSITIVE, hashed not encrypted -- same reasoning as LoginToken: nothing
+/// ever needs the original code back, only "does this match?".
+model RevealChallenge {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  codeHash  String    @unique @map("code_hash")
+  expiresAt DateTime  @map("expires_at")
+  /// Set when the code is redeemed. A redeemed challenge unlocks reveals
+  /// until `unlockedUntil`; it can never be redeemed a second time.
+  consumedAt    DateTime? @map("consumed_at")
+  unlockedUntil DateTime? @map("unlocked_until")
+  /// Incremented on each failed redeem attempt; the challenge is dead once
+  /// this hits MAX_REVEAL_CHALLENGE_ATTEMPTS, so a 6-digit code can't be
+  /// brute-forced within its 10-minute life.
+  failedAttempts Int      @default(0) @map("failed_attempts")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("reveal_challenges")
+}
+
+/// Append-only audit trail: one row per password decryption.
+///
+/// Unlike ApplicationLogEntry (which is deliberately incapable of holding a
+/// raw value), this table records only *that* a reveal happened and from
+/// where -- never the password, and never anything derived from it. Its
+/// purpose is to make silent credential exfiltration impossible: if
+/// something reads the vault, there is a row for it.
+model CredentialRevealEvent {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  credentialId String   @map("credential_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  timestamp    DateTime @default(now())
+  /// "ui" (user clicked Reveal) or "agent" (apply-agent used it to log in).
+  revealedBy   String   @map("revealed_by")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+
+  credential PortalCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([credentialId])
+  @@map("credential_reveal_events")
 }

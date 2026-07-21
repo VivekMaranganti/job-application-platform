@@ -22,6 +22,7 @@ apps/apply-agent-service/src/
   control/ws-handler.ts      wires a WebSocket to a session's event stream / video stream
   session/
     types.ts                 SessionControl / HumanReviewActions -- the never-auto-submit split
+    account-provisioner.ts   registration walls: allowlist check, reuse-or-create, save to vault
     apply-session.ts          one instance per Application: browser + state + control
     automation-loop.ts        extract -> match -> fill -> yield, one pass at a time
     session-manager.ts        in-memory registry keyed by applicationId

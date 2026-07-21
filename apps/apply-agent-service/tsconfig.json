@@ -14,5 +14,11 @@
     "declaration": false,
     "noUncheckedIndexedAccess": true
   },
-  "include": ["src/**/*.ts"]
+  // Test files are excluded here and covered by tsconfig.test.json instead.
+  // They use explicit ".ts" import specifiers (required by `node --test
+  // --experimental-strip-types`, which resolves like Node's ESM resolver and
+  // does no extension inference), and `allowImportingTsExtensions` is
+  // incompatible with emitting -- which this config does, unlike packages/db's.
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

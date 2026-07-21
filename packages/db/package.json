@@ -16,7 +16,12 @@
     "db:validate": "prisma validate",
     "db:seed:greenhouse": "node connectors/greenhouse/run.ts",
     "db:seed:lever": "node connectors/lever/run.ts",
-    "typecheck": "tsc --noEmit"
+    "db:seed:ashby": "node connectors/ashby/run.ts",
+    "db:seed:smartrecruiters": "node connectors/smartrecruiters/run.ts",
+    "db:seed:all": "npm run db:seed:greenhouse; npm run db:seed:lever; npm run db:seed:ashby; npm run db:seed:smartrecruiters",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-strip-types",
+    "test:smoke": "tsx --env-file=.env scripts/smoke-test-vault.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0"
@@ -24,6 +29,7 @@
   "devDependencies": {
     "prisma": "^6.1.0",
     "typescript": "^5.6.0",
-    "@types/node": "^20.0.0"
+    "@types/node": "^20.0.0",
+    "tsx": "^4.19.0"
   }
 }

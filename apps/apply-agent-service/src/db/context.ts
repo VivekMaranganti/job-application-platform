@@ -38,11 +38,23 @@ export interface RequiredInfoAnswerContext {
 export interface ApplicationContext {
   userId: string;
   applicationId: string;
+  /**
+   * The user's login email (`users.email`). Used as the fallback username
+   * when the agent registers an ATS account and no contact email is set --
+   * see session/account-provisioner.ts.
+   */
+  accountEmail: string;
   jobListing: JobListingContext;
   profile: {
     locations: string[];
     levels: string[];
     targetTitles: string[];
+    /**
+     * Preferred contact address for applications, or null to fall back to
+     * `accountEmail`. Not sensitive (plain column -- see schema.prisma's
+     * note on Profile's contact fields).
+     */
+    contactEmail: string | null;
   };
   requiredInfoAnswers: RequiredInfoAnswerContext[];
 }
@@ -63,9 +75,10 @@ export async function loadApplicationContext(userId: string, applicationId: stri
     throw new ApplicationNotFoundError(applicationId);
   }
 
-  const [profileRow, requiredInfoRows] = await Promise.all([
+  const [profileRow, requiredInfoRows, userRow] = await Promise.all([
     prisma.profile.findUnique({ where: { userId } }),
     prisma.requiredInfoAnswer.findMany({ where: { userId } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
   ]);
 
   // NOTE: decryptField is intentionally NOT imported/called for manual-mode
@@ -87,6 +100,7 @@ export async function loadApplicationContext(userId: string, applicationId: stri
   return {
     userId,
     applicationId,
+    accountEmail: userRow?.email ?? "",
     jobListing: {
       id: application.jobListing.id,
       title: application.jobListing.title,
@@ -98,6 +112,7 @@ export async function loadApplicationContext(userId: string, applicationId: stri
       locations: profileRow?.locations ?? [],
       levels: (profileRow?.levels ?? []).map(String),
       targetTitles: profileRow?.targetTitles ?? [],
+      contactEmail: profileRow?.contactEmail ?? null,
     },
     requiredInfoAnswers,
   };

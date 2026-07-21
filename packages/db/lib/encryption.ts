@@ -119,6 +119,34 @@ export async function encryptField(
 }
 
 /**
+ * Converts a `Buffer` into the shape Prisma's generated `Bytes` types want.
+ *
+ * Prisma 6 types `Bytes` columns as `Uint8Array<ArrayBuffer>`, while Node's
+ * `Buffer` is `Uint8Array<ArrayBufferLike>` -- the wider parameter exists
+ * because a Buffer's backing store could in principle be a
+ * `SharedArrayBuffer`. The two are the same thing at runtime but don't
+ * match structurally, so every write to an encrypted column needs this
+ * conversion and every read needs `fromPrismaBytes`.
+ *
+ * These live here, next to `encryptField`/`decryptField`, because this is
+ * the module that produces and consumes those Buffers. (Note
+ * `apps/web/lib/repository/postgres.ts` has its own private copy of this
+ * pair, written before this one existed -- worth collapsing onto these
+ * exports next time that file is touched, but not worth the churn on its
+ * own.)
+ */
+export function toPrismaBytes(buf: Buffer): Uint8Array<ArrayBuffer>;
+export function toPrismaBytes(buf: Buffer | null): Uint8Array<ArrayBuffer> | null;
+export function toPrismaBytes(buf: Buffer | null): Uint8Array<ArrayBuffer> | null {
+  return buf ? new Uint8Array(buf) : null;
+}
+
+/** Inverse of `toPrismaBytes`: a `Bytes` column value back to a `Buffer`. */
+export function fromPrismaBytes(bytes: Uint8Array | null | undefined): Buffer | null {
+  return bytes ? Buffer.from(bytes) : null;
+}
+
+/**
  * Decrypts a `bytea`/`Bytes` column value produced by `encryptField`.
  * Returns `null` unchanged for `null` input (e.g. a field that was never
  * set). Throws if the tag doesn't verify -- treat that as corruption/

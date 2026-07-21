@@ -131,8 +131,53 @@ export class ApplySession implements SessionControl, HumanReviewActions {
     this.broadcast({ type: "agent_action", field, valueCategory: category, action: "filled", confidence: 1 });
   }
 
+  /**
+   * Logs getting past a registration wall. See SessionControl's declaration
+   * for why this method takes no value parameter.
+   *
+   * `fieldLabel` is a caption describing the step, not scraped field text --
+   * the account action isn't tied to one input on the page. `sentTo` is the
+   * auth host, which can differ from `this.hostname` (the job listing's
+   * host) when an ATS bounces the candidate to a central identity domain.
+   */
+  async recordAccountAction(
+    action: "created_account" | "signed_in",
+    hostname: string,
+    username: string,
+  ): Promise<void> {
+    const label = action === "created_account" ? "Account registration" : "Account sign-in";
+    await logFieldEntry({
+      userId: this.userId,
+      applicationId: this.applicationId,
+      fieldLabel: label,
+      valueCategory: "account_credentials",
+      sentTo: hostname,
+      source: "auto",
+    });
+    // `username` reaches the event stream but never the log table. It's
+    // almost always the user's own email (already in plaintext on
+    // users.email), and the human watching needs to see which account was
+    // used. The password is not a parameter of this method at all.
+    this.broadcast({
+      type: "agent_action",
+      field: { label: `${label} (${username})`, selector: "" },
+      valueCategory: "account_credentials",
+      action,
+      confidence: 1,
+    });
+  }
+
   async yieldControl(
-    reason: "manual_field" | "low_confidence" | "captcha" | "unrecognized_field" | "error",
+    reason:
+      | "manual_field"
+      | "low_confidence"
+      | "captcha"
+      | "unrecognized_field"
+      | "jurisdiction_not_cleared"
+      | "account_creation_not_allowed"
+      | "account_form_needs_input"
+      | "account_creation_failed"
+      | "error",
     field: FieldRef | undefined,
     category: FieldValueCategory | undefined,
     message: string,

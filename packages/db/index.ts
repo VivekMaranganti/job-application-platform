@@ -20,3 +20,34 @@ export {
 } from "./lib/policy/criminal-history-jurisdiction";
 export type { Jurisdiction } from "./lib/policy/criminal-history-jurisdiction";
 export { parseJurisdiction } from "./lib/policy/jurisdiction";
+export {
+  ALLOWED_ATS_VENDORS,
+  checkAccountCreationAllowed,
+  isAccountCreationAllowed,
+} from "./lib/policy/account-creation-allowlist";
+export type {
+  AllowedAtsVendor,
+  AllowlistDecision,
+} from "./lib/policy/account-creation-allowlist";
+export { generatePassword } from "./lib/password-generator";
+export {
+  saveCredential,
+  listCredentials,
+  revealCredential,
+  findCredentialForUrl,
+  deleteCredential,
+  listRevealEvents,
+  createRevealChallenge,
+  redeemRevealChallenge,
+  isRevealUnlocked,
+  getRevealUnlockedUntil,
+  REVEAL_UNLOCK_WINDOW_MS,
+  MAX_REVEAL_CHALLENGE_ATTEMPTS,
+} from "./lib/credential-vault";
+export type {
+  CredentialSummary,
+  SaveCredentialInput,
+  SaveCredentialResult,
+  RevealContext,
+  RedeemResult,
+} from "./lib/credential-vault";
